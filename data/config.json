@@ -1,0 +1,2602 @@
+{
+  "debug": true,
+  "weights": {
+    "NEED": 10,
+    "CARD_L1": 10,
+    "CARD_F1": 10,
+    "CARD_F2": 10,
+    "LIFE": 10,
+    "REL": 10,
+    "Q5": 5,
+    "Q7": 5,
+    "Q6": 10,
+    "Q9": 10,
+    "Q10": 5,
+    "Q12": 5
+  },
+  "order": {
+    "S60": [
+      "NEED",
+      "CARD_L1",
+      "CARD_F1",
+      "CARD_F2",
+      "LIFE",
+      "REL"
+    ],
+    "S40": [
+      "Q5",
+      "Q7",
+      "Q6",
+      "Q9",
+      "Q10",
+      "Q12"
+    ]
+  },
+  "budget": {
+    "S60": {
+      "N": 4,
+      "r": 0.75
+    },
+    "S40": {
+      "N": 6,
+      "r": 0.35
+    }
+  },
+  "no_followup_tasks": [
+    "NEED",
+    "SUP1",
+    "SUP2",
+    "SUP3",
+    "SUP4"
+  ],
+  "no_replace_tasks": [
+    "NEED",
+    "SUP1",
+    "SUP2",
+    "SUP3",
+    "SUP4"
+  ],
+  "limits": {
+    "card_followup": 2,
+    "followup_per_task": 1,
+    "replace_per_task": 1
+  },
+  "max_input_chars": {
+    "default": 300,
+    "NEED": 600,
+    "Q12": 500
+  },
+  "asks_back_template": "我想了解你的{about}呀~",
+  "model_fail_reply": "刚才没太听清，能再说一次吗？",
+  "prefilter": {
+    "digits_min": 6,
+    "need_only": [
+      "emoji"
+    ]
+  },
+  "tag_catalog_in_prompt": false,
+  "blocked": {
+    "compliance": [
+      "代孕",
+      "借腹生子",
+      "卖卵",
+      "买卖婚姻",
+      "包养",
+      "援交",
+      "约炮",
+      "一夜情",
+      "裸聊",
+      "赌博",
+      "博彩",
+      "毒品"
+    ],
+    "no_ask": [
+      "身高",
+      "体重"
+    ],
+    "no_label": [
+      "人格",
+      "依恋",
+      "MBTI",
+      "原生家庭"
+    ]
+  },
+  "fields": {
+    "NEED": {
+      "name": "对 TA 的需求",
+      "subjects": [
+        "TA"
+      ],
+      "subs": {
+        "smoke": {
+          "type": "enum",
+          "values": [
+            "不吸烟",
+            "不介意"
+          ]
+        },
+        "drink": {
+          "type": "enum",
+          "values": [
+            "不喝酒",
+            "少喝",
+            "不介意"
+          ]
+        },
+        "city": {
+          "type": "enum",
+          "values": [
+            "同城",
+            "不限"
+          ]
+        },
+        "edu": {
+          "type": "enum",
+          "values": [
+            "本科及以上",
+            "硕士及以上",
+            "不限"
+          ]
+        },
+        "pet": {
+          "type": "enum",
+          "values": [
+            "喜欢宠物",
+            "不养宠物",
+            "不介意"
+          ]
+        },
+        "age": {
+          "type": "open"
+        },
+        "height": {
+          "type": "open"
+        },
+        "traits": {
+          "type": "open"
+        },
+        "interests": {
+          "type": "open"
+        },
+        "other": {
+          "type": "open"
+        }
+      }
+    },
+    "CARD": {
+      "name": "人物卡反馈",
+      "subjects": [
+        "候选反馈"
+      ],
+      "subs": {
+        "l1": {
+          "type": "enum",
+          "multi": true,
+          "values": [
+            "A",
+            "B",
+            "C",
+            "都没感觉",
+            "都还行"
+          ]
+        },
+        "l2": {
+          "type": "open"
+        }
+      }
+    },
+    "Q1": {
+      "name": "兴趣",
+      "subjects": [
+        "自己"
+      ],
+      "subs": {
+        "items": {
+          "type": "open"
+        }
+      }
+    },
+    "Q2": {
+      "name": "日常能量条",
+      "subjects": [
+        "自己"
+      ],
+      "subs": {
+        "sleep": {
+          "type": "enum",
+          "values": [
+            "偏早睡",
+            "不固定",
+            "偏晚睡"
+          ]
+        },
+        "pace": {
+          "type": "enum",
+          "values": [
+            "相对轻松",
+            "适中",
+            "比较忙碌",
+            "不固定"
+          ]
+        }
+      }
+    },
+    "Q3": {
+      "name": "独处/社交",
+      "subjects": [
+        "自己"
+      ],
+      "subs": {
+        "social": {
+          "type": "enum",
+          "values": [
+            "明显偏独处",
+            "比较偏独处",
+            "均衡",
+            "比较偏社交",
+            "明显偏社交"
+          ]
+        }
+      }
+    },
+    "Q4": {
+      "name": "关系推进",
+      "subjects": [
+        "自己",
+        "TA"
+      ],
+      "subs": {
+        "pace": {
+          "type": "enum",
+          "values": [
+            "非常慢热",
+            "偏慢热",
+            "自然发展",
+            "偏主动",
+            "非常主动"
+          ]
+        }
+      }
+    },
+    "Q5": {
+      "name": "养宠物态度",
+      "subjects": [
+        "自己"
+      ],
+      "subs": {
+        "has_pet": {
+          "type": "enum",
+          "values": [
+            "正在养",
+            "没有养"
+          ]
+        },
+        "pet_type": {
+          "type": "open"
+        },
+        "animal_like": {
+          "type": "enum",
+          "values": [
+            "喜欢",
+            "一般",
+            "不喜欢"
+          ]
+        }
+      }
+    },
+    "Q6": {
+      "name": "消费观",
+      "subjects": [
+        "自己"
+      ],
+      "subs": {
+        "style": {
+          "type": "enum",
+          "values": [
+            "理智务实",
+            "享乐至上",
+            "追求品质",
+            "随性随缘"
+          ]
+        },
+        "condition": {
+          "type": "open"
+        }
+      }
+    },
+    "Q7": {
+      "name": "吸烟/饮酒",
+      "subjects": [
+        "自己"
+      ],
+      "subs": {
+        "smoke": {
+          "type": "enum",
+          "values": [
+            "不吸",
+            "偶尔",
+            "经常"
+          ]
+        },
+        "drink": {
+          "type": "enum",
+          "values": [
+            "不喝",
+            "偶尔",
+            "经常"
+          ]
+        }
+      }
+    },
+    "Q8": {
+      "name": "期待的TA",
+      "subjects": [
+        "TA",
+        "关系"
+      ],
+      "subs": {
+        "expectation": {
+          "type": "open"
+        },
+        "boundary": {
+          "type": "open"
+        }
+      }
+    },
+    "Q9": {
+      "name": "事业与感情协调",
+      "subjects": [
+        "关系"
+      ],
+      "subs": {
+        "balance": {
+          "type": "enum",
+          "values": [
+            "明显偏感情",
+            "比较偏感情",
+            "视情况而定",
+            "比较偏事业学业",
+            "明显偏事业学业"
+          ]
+        },
+        "strategy": {
+          "type": "open"
+        }
+      }
+    },
+    "Q10": {
+      "name": "关系交流",
+      "subjects": [
+        "关系"
+      ],
+      "subs": {
+        "openness": {
+          "type": "enum",
+          "values": [
+            "避而不谈",
+            "点到为止",
+            "开诚布公",
+            "随关系发展决定"
+          ]
+        }
+      }
+    },
+    "Q11": {
+      "name": "关系需求",
+      "subjects": [
+        "关系"
+      ],
+      "subs": {
+        "need": {
+          "type": "enum",
+          "values": [
+            "情感慰藉",
+            "灵魂共鸣",
+            "现实助力",
+            "感官吸引"
+          ]
+        }
+      }
+    },
+    "Q12": {
+      "name": "全局补充",
+      "subjects": [
+        "自己",
+        "TA",
+        "关系"
+      ],
+      "subs": {
+        "supplement": {
+          "type": "open"
+        }
+      }
+    },
+    "SELF": {
+      "name": "自我补充",
+      "subjects": [
+        "自己"
+      ],
+      "subs": {
+        "roast": {
+          "type": "open"
+        },
+        "wish": {
+          "type": "open"
+        },
+        "touch": {
+          "type": "open"
+        },
+        "skill": {
+          "type": "open"
+        }
+      }
+    }
+  },
+  "tasks": {
+    "NEED": {
+      "stage": "S60",
+      "kind": "main",
+      "theme": "开场需求",
+      "about": "理想型",
+      "goal": "用户想找什么样的人：硬性条件和偏好",
+      "key_semantics": "请用户尽量具体地说想找的人；硬性条件和加分项都可以说",
+      "fallback": "你心中理想的另一半，大概是什么样的人呀？",
+      "scenes": [],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "NEED.traits",
+          "NEED.interests",
+          "NEED.smoke",
+          "NEED.drink",
+          "NEED.city",
+          "NEED.edu",
+          "NEED.pet",
+          "NEED.age",
+          "NEED.height",
+          "NEED.other"
+        ]
+      },
+      "script": "那就开始啦～想到什么都可以和我说，说得越具体，我就越懂你～\n\n嗯～我想先听听你的想法～你心中理想的另一半，大概是什么样的人呀？\n\n想到什么都可以和我说说，比如说外形、生活状态、兴趣、比较在意的性格，甚至一个很小的相处细节，都可以告诉我～",
+      "core": "你心中理想的另一半，大概是什么样的人呀？"
+    },
+    "CARD_L1": {
+      "stage": "S60",
+      "kind": "main",
+      "theme": "人物第一感觉",
+      "about": "第一感觉",
+      "goal": "用户对三张人物卡的第一感觉：更想了解谁，或都没感觉",
+      "key_semantics": "三位里谁更想了解；都没感觉也可以直说",
+      "fallback": "这三个人里面，你对谁比较心动呀～",
+      "scenes": [],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "CARD.l1"
+        ]
+      },
+      "script": "这三个人里面，你对谁比较心动呀～可以不止一个哦，一定要说说哪里吸引你～",
+      "core": "这三个人里面，你对谁比较心动呀～"
+    },
+    "CARD_F1": {
+      "stage": "S60",
+      "kind": "judge",
+      "theme": "人物追问判断1",
+      "about": "心动点"
+    },
+    "CARD_F2": {
+      "stage": "S60",
+      "kind": "judge",
+      "theme": "人物追问判断2（含卡片未满足的需求）",
+      "about": "心动点"
+    },
+    "LIFE": {
+      "stage": "S60",
+      "kind": "main",
+      "theme": "兴趣生活",
+      "about": "日常安排",
+      "goal": "用户自己平时的兴趣和常做的活动",
+      "key_semantics": "问的是用户自己，平时/空闲时喜欢做什么",
+      "fallback": "平时工作、学习之外，你喜欢怎么安排自己的时间呀？",
+      "scenes": [
+        "下班后的晚上",
+        "一个没安排的周末",
+        "最近常做的一件小事"
+      ],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "Q1.items"
+        ]
+      },
+      "script": "平时工作、学习之外，你喜欢怎么安排自己的时间呀？比如周末一般会做些什么，有什么喜欢的事吗？",
+      "core": "平时工作、学习之外，你喜欢怎么安排自己的时间呀？"
+    },
+    "RHYTHM": {
+      "stage": "S60",
+      "kind": "main",
+      "theme": "生活节奏",
+      "about": "作息",
+      "goal": "用户自己的作息早晚和日常忙碌程度（两个子项分开记）",
+      "key_semantics": "作息偏早还是偏晚；日常忙不忙",
+      "fallback": "你平时作息大概是什么样？偏早睡还是晚睡，日子过得忙不忙？",
+      "scenes": [
+        "工作日的晚上几点收工",
+        "周末早上一般几点醒"
+      ],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "Q2.sleep",
+          "Q2.pace"
+        ]
+      },
+      "script": "你平时作息大概是什么样？偏早睡还是晚睡，日子过得忙不忙？",
+      "core": "你平时作息大概是什么样？偏早睡还是晚睡，日子过得忙不忙？",
+      "script_note": "脚本里没有这一题，待定：并入“生活中的你”还是保留",
+      "retired": "10/15 去掉：作息只在用户顺带提到时记录，不再单独提问"
+    },
+    "REL": {
+      "stage": "S60",
+      "kind": "main",
+      "theme": "关系期待",
+      "about": "恋爱状态",
+      "goal": "如果开始一段关系，用户希望两个人平时怎么相处",
+      "key_semantics": "假设已经在一起后的日常相处方式；不问新的择偶硬条件",
+      "fallback": "假如真的谈恋爱了，你觉得自己会是什么样的呀？你希望两个人平时怎么相处呢？",
+      "scenes": [
+        "一起过周末",
+        "各自忙的时候",
+        "闹别扭以后"
+      ],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "Q8.expectation",
+          "Q4.pace"
+        ],
+        "subjects": {
+          "Q4.pace": [
+            "自己"
+          ],
+          "Q8.expectation": [
+            "关系"
+          ]
+        }
+      },
+      "script": "生活里的你有点轮廓啦～那我们再聊聊恋爱里的你？\n\n假如真的谈恋爱了，你觉得自己会是什么样的呀？你希望两个人平时怎么相处呢？",
+      "core": "假如真的谈恋爱了，你觉得自己会是什么样的呀？你希望两个人平时怎么相处呢？"
+    },
+    "Q5": {
+      "stage": "S40",
+      "kind": "main",
+      "theme": "养宠物态度",
+      "about": "宠物生活",
+      "goal": "用户当前是否养宠物，以及对小动物的喜欢程度（两项分开）",
+      "key_semantics": "现在有没有养；喜不喜欢小动物；没养不等于不喜欢",
+      "fallback": "你现在有养宠物吗？",
+      "scenes": [
+        "路上遇到小猫小狗",
+        "朋友家的宠物"
+      ],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "Q5.has_pet",
+          "Q5.animal_like"
+        ]
+      },
+      "script": "你现在有养宠物吗？",
+      "core": "你现在有养宠物吗？"
+    },
+    "Q7": {
+      "stage": "S40",
+      "kind": "main",
+      "theme": "吸烟/饮酒",
+      "about": "烟酒习惯",
+      "goal": "用户本人吸烟、饮酒习惯（两项分开）",
+      "key_semantics": "本人是否吸烟、是否喝酒",
+      "fallback": "你平常会抽烟吗？喝酒呢？",
+      "scenes": [
+        "朋友聚会",
+        "下班小酌"
+      ],
+      "min_info": {
+        "mode": "all",
+        "items": [
+          "Q7.smoke",
+          "Q7.drink"
+        ]
+      },
+      "script": "你平常会抽烟吗？喝酒呢？",
+      "core": "你平常会抽烟吗？喝酒呢？",
+      "core_by_missing": {
+        "Q7.smoke": "你平常会抽烟吗？",
+        "Q7.drink": "那你平常喝酒吗？"
+      }
+    },
+    "Q6": {
+      "stage": "S40",
+      "kind": "main",
+      "theme": "消费观",
+      "about": "消费习惯",
+      "goal": "用户遇到喜欢但需要考虑价格的东西时怎么决定",
+      "key_semantics": "喜欢的东西 + 价格需要考虑 + 如何决定；不强制二选一",
+      "fallback": "假如看到一件挺喜欢、但又不是非买不可的东西，你一般会怎么决定买不买呀？",
+      "scenes": [
+        "逛街看到心动的衣服",
+        "想换新手机"
+      ],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "Q6.style",
+          "Q6.condition"
+        ]
+      },
+      "script": "假如看到一件挺喜欢、但又不是非买不可的东西，你一般会怎么决定买不买呀？",
+      "core": "假如看到一件挺喜欢、但又不是非买不可的东西，你一般会怎么决定买不买呀？"
+    },
+    "Q9": {
+      "stage": "S40",
+      "kind": "main",
+      "theme": "事业与感情协调",
+      "about": "事业和感情",
+      "goal": "遇到重要发展机会、未来变忙、陪伴减少时，用户怎么考虑和协调",
+      "key_semantics": "重要机会 + 会变忙 + 陪伴另一半时间减少 + 怎么考虑；不强制二选一",
+      "fallback": "如果有个你特别想抓住的事业上的机会，但接下来会忙上好一阵，陪另一半的时间也少了，你会怎么处理呀？",
+      "scenes": [
+        "外派半年",
+        "接手一个大项目"
+      ],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "Q9.balance",
+          "Q9.strategy"
+        ]
+      },
+      "script": "如果有个你特别想抓住的事业上的机会，但接下来会忙上好一阵，陪另一半的时间也少了，你会怎么处理呀？",
+      "core": "如果有个你特别想抓住的事业上的机会，但接下来会忙上好一阵，陪另一半的时间也少了，你会怎么处理呀？"
+    },
+    "Q10": {
+      "stage": "S40",
+      "kind": "main",
+      "theme": "关系交流",
+      "about": "想法",
+      "goal": "两人聊到过去感情经历时，用户愿意交流到什么程度",
+      "key_semantics": "和另一半聊过去感情经历的舒适程度；不要求向 LoveMi 披露经历",
+      "fallback": "和 TA 聊起以前的情感，你希望聊到什么程度～",
+      "scenes": [
+        "刚在一起时",
+        "关系稳定以后"
+      ],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "Q10.openness"
+        ]
+      },
+      "script": "那和 TA 聊起以前的情感，你希望聊到什么程度～",
+      "core": "和 TA 聊起以前的情感，你希望聊到什么程度～"
+    },
+    "Q12": {
+      "stage": "S40",
+      "kind": "main",
+      "theme": "开放补充",
+      "about": "想法",
+      "goal": "找另一半这件事，用户还有什么没聊到但在意的",
+      "key_semantics": "开放补充；说“没有”可以直接结束",
+      "fallback": "有没有什么我刚才没问到，但你觉得找另一半时一定得考虑的事呢？",
+      "scenes": [],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "Q12.supplement"
+        ]
+      },
+      "script": "最后一个问题～有没有什么我刚才没问到，但你觉得找另一半时一定得考虑的事呢？",
+      "core": "有没有什么我刚才没问到，但你觉得找另一半时一定得考虑的事呢？"
+    },
+    "SUP1": {
+      "stage": "SUP",
+      "kind": "supplement",
+      "theme": "朋友眼中的你",
+      "about": "朋友眼里的你",
+      "goal": "了解用户的性格侧写和可爱的小短板（来自朋友的视角）",
+      "key_semantics": "朋友最常吐槽的点；轻松自嘲即可，不要求深刻",
+      "fallback": "那你朋友平时最爱吐槽你什么？",
+      "script": "那你朋友平时最爱吐槽你什么？",
+      "core": "那你朋友平时最爱吐槽你什么？",
+      "scenes": [],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "SELF.roast"
+        ]
+      },
+      "profile_target": "核心洞察、我的相处方式"
+    },
+    "SUP2": {
+      "stage": "SUP",
+      "kind": "supplement",
+      "theme": "愿望单",
+      "about": "心愿",
+      "goal": "了解用户向往、但还没去做的事",
+      "key_semantics": "特别想做、一直还在愿望单里",
+      "fallback": "那有没有什么是你特想做，但一直还在“愿望单”里的事～",
+      "script": "那有没有什么是你特想做，但一直还在“愿望单”里的事～",
+      "core": "那有没有什么是你特想做，但一直还在“愿望单”里的事～",
+      "scenes": [],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "SELF.wish"
+        ]
+      },
+      "profile_target": "兴趣日常"
+    },
+    "SUP3": {
+      "stage": "SUP",
+      "kind": "supplement",
+      "theme": "戳中你的小细节",
+      "about": "心动细节",
+      "goal": "了解用户在情感上的触点",
+      "key_semantics": "别人不容易注意到、却能打动你的小细节",
+      "fallback": "有没有什么别人不容易注意到的小细节，却能狠狠地戳中你？",
+      "script": "有没有什么别人不容易注意到的小细节，却能狠狠地戳中你？",
+      "core": "有没有什么别人不容易注意到的小细节，却能狠狠地戳中你？",
+      "scenes": [],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "SELF.touch"
+        ]
+      },
+      "profile_target": "我对 TA 的期待、我的相处方式"
+    },
+    "SUP4": {
+      "stage": "SUP",
+      "kind": "supplement",
+      "theme": "隐藏小技能",
+      "about": "小技能",
+      "goal": "了解用户的兴趣和反差感",
+      "key_semantics": "奇怪的、平时没机会展示的小技能",
+      "fallback": "你有没有什么奇怪的小技能，平时根本没机会展示",
+      "script": "你有没有什么奇怪的小技能，平时根本没机会展示",
+      "core": "你有没有什么奇怪的小技能，平时根本没机会展示",
+      "scenes": [],
+      "min_info": {
+        "mode": "any",
+        "items": [
+          "SELF.skill"
+        ]
+      },
+      "profile_target": "兴趣日常"
+    }
+  },
+  "tag_dict": [
+    {
+      "id": "L053",
+      "text": "夜猫子",
+      "field": "Q2",
+      "sub": "sleep",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "sleep",
+      "p": 2,
+      "in": [
+        "偏晚睡"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "S001",
+      "text": "早睡派",
+      "field": "Q2",
+      "sub": "sleep",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "sleep",
+      "p": 2,
+      "in": [
+        "偏早睡"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "S002",
+      "text": "日程满满",
+      "field": "Q2",
+      "sub": "pace",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "pace2",
+      "p": 4,
+      "in": [
+        "比较忙碌"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "S003",
+      "text": "节奏松弛",
+      "field": "Q2",
+      "sub": "pace",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "pace2",
+      "p": 4,
+      "in": [
+        "相对轻松"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L063",
+      "text": "慢热型",
+      "field": "Q4",
+      "sub": "pace",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "pace",
+      "p": 1,
+      "in": [
+        "非常慢热",
+        "偏慢热"
+      ],
+      "cat": "社交情感"
+    },
+    {
+      "id": "L065",
+      "text": "自然发展",
+      "field": "Q4",
+      "sub": "pace",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "pace",
+      "p": 1,
+      "in": [
+        "自然发展"
+      ],
+      "cat": "社交情感"
+    },
+    {
+      "id": "L066",
+      "text": "恋爱打直球",
+      "field": "Q4",
+      "sub": "pace",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "pace",
+      "p": 1,
+      "in": [
+        "偏主动",
+        "非常主动"
+      ],
+      "cat": "社交情感"
+    },
+    {
+      "id": "L061",
+      "text": "偏爱独处",
+      "field": "Q3",
+      "sub": "social",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "social",
+      "p": 3,
+      "in": [
+        "明显偏独处",
+        "比较偏独处"
+      ],
+      "cat": "社交情感"
+    },
+    {
+      "id": "L062",
+      "text": "社交随缘",
+      "field": "Q3",
+      "sub": "social",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "social",
+      "p": 3,
+      "in": [
+        "均衡"
+      ],
+      "cat": "社交情感"
+    },
+    {
+      "id": "L059",
+      "text": "喜欢热闹局",
+      "field": "Q3",
+      "sub": "social",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "social",
+      "p": 3,
+      "in": [
+        "比较偏社交",
+        "明显偏社交"
+      ],
+      "cat": "社交情感"
+    },
+    {
+      "id": "L070",
+      "text": "追求共鸣",
+      "field": "Q11",
+      "sub": "need",
+      "subject": [
+        "关系"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "need",
+      "p": 1,
+      "in": [
+        "灵魂共鸣"
+      ],
+      "cat": "社交情感"
+    },
+    {
+      "id": "L068",
+      "text": "重视陪伴",
+      "field": "Q11",
+      "sub": "need",
+      "subject": [
+        "关系"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "need",
+      "p": 1,
+      "in": [
+        "情感慰藉"
+      ],
+      "cat": "社交情感"
+    },
+    {
+      "id": "L073",
+      "text": "看重眼缘",
+      "field": "Q11",
+      "sub": "need",
+      "subject": [
+        "关系"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "need",
+      "p": 1,
+      "in": [
+        "感官吸引"
+      ],
+      "cat": "社交情感"
+    },
+    {
+      "id": "S017",
+      "text": "互相扶持",
+      "field": "Q11",
+      "sub": "need",
+      "subject": [
+        "关系"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "need",
+      "p": 1,
+      "in": [
+        "现实助力"
+      ],
+      "cat": "社交情感"
+    },
+    {
+      "id": "L026",
+      "text": "球拍常备",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_ball",
+      "p": 4,
+      "contains": [
+        "羽毛球",
+        "网球",
+        "乒乓",
+        "篮球"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L029",
+      "text": "喜欢动起来",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_sport",
+      "p": 4,
+      "contains": [
+        "跑步",
+        "健身",
+        "游泳",
+        "瑜伽",
+        "骑行",
+        "运动"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L035",
+      "text": "喜欢亲近自然",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_nature",
+      "p": 4,
+      "contains": [
+        "爬山",
+        "徒步",
+        "露营",
+        "钓鱼",
+        "户外"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L034",
+      "text": "喜欢在路上",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_travel",
+      "p": 4,
+      "contains": [
+        "旅行",
+        "旅游",
+        "自驾"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L041",
+      "text": "爱逛展",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_exhibit",
+      "p": 4,
+      "contains": [
+        "看展",
+        "逛展",
+        "展览",
+        "美术馆",
+        "博物馆"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L046",
+      "text": "喜欢摄影",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_photo",
+      "p": 4,
+      "contains": [
+        "摄影",
+        "拍照"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L036",
+      "text": "喜欢泡影院",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_movie",
+      "p": 4,
+      "contains": [
+        "电影"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L037",
+      "text": "爱追剧",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_drama",
+      "p": 4,
+      "contains": [
+        "追剧",
+        "综艺"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L039",
+      "text": "音乐不能停",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_music",
+      "p": 4,
+      "contains": [
+        "音乐",
+        "听歌"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L040",
+      "text": "游戏搭子",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_game",
+      "p": 4,
+      "contains": [
+        "游戏"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L023",
+      "text": "爱下厨",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_cook",
+      "p": 4,
+      "contains": [
+        "做饭",
+        "烘焙",
+        "下厨"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L021",
+      "text": "是个吃货",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_food",
+      "p": 4,
+      "contains": [
+        "美食",
+        "探店",
+        "吃"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L050",
+      "text": "喜欢散散步",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_walk",
+      "p": 4,
+      "contains": [
+        "散步"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "S013",
+      "text": "爱看书",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_read",
+      "p": 4,
+      "contains": [
+        "看书",
+        "读书",
+        "阅读"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "S011",
+      "text": "爱玩桌游",
+      "field": "Q1",
+      "sub": "items",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "i_board",
+      "p": 4,
+      "contains": [
+        "桌游",
+        "剧本杀",
+        "密室"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L056",
+      "text": "喜欢小动物",
+      "field": "Q5",
+      "sub": "animal_like",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "animal",
+      "p": 3,
+      "in": [
+        "喜欢"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "S008",
+      "text": "不吸烟",
+      "field": "Q7",
+      "sub": "smoke",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "smoke",
+      "p": 5,
+      "in": [
+        "不吸"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "S009",
+      "text": "滴酒不沾",
+      "field": "Q7",
+      "sub": "drink",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "drink",
+      "p": 5,
+      "in": [
+        "不喝"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "S010",
+      "text": "偶尔小酌",
+      "field": "Q7",
+      "sub": "drink",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "drink",
+      "p": 5,
+      "in": [
+        "偶尔"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "S004",
+      "text": "理性消费派",
+      "field": "Q6",
+      "sub": "style",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "spend",
+      "p": 4,
+      "in": [
+        "理智务实"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "S005",
+      "text": "品质控",
+      "field": "Q6",
+      "sub": "style",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "spend",
+      "p": 4,
+      "in": [
+        "追求品质"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "S006",
+      "text": "快乐消费派",
+      "field": "Q6",
+      "sub": "style",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "spend",
+      "p": 4,
+      "in": [
+        "享乐至上"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "S007",
+      "text": "随心买买",
+      "field": "Q6",
+      "sub": "style",
+      "subject": [
+        "自己"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "spend",
+      "p": 4,
+      "in": [
+        "随性随缘"
+      ],
+      "cat": "兴趣生活"
+    },
+    {
+      "id": "L074",
+      "text": "重视感情",
+      "field": "Q9",
+      "sub": "balance",
+      "subject": [
+        "关系"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "career",
+      "p": 4,
+      "in": [
+        "明显偏感情",
+        "比较偏感情"
+      ],
+      "cat": "社交情感"
+    },
+    {
+      "id": "L075",
+      "text": "重视事业",
+      "field": "Q9",
+      "sub": "balance",
+      "subject": [
+        "关系"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "career",
+      "p": 4,
+      "in": [
+        "明显偏事业学业",
+        "比较偏事业学业"
+      ],
+      "cat": "社交情感"
+    },
+    {
+      "id": "L076",
+      "text": "重视坦诚交流",
+      "field": "Q10",
+      "sub": "openness",
+      "subject": [
+        "关系"
+      ],
+      "scenes": [
+        "60",
+        "100"
+      ],
+      "group": "talk",
+      "p": 3,
+      "in": [
+        "开诚布公"
+      ],
+      "cat": "社交情感"
+    }
+  ],
+  "tag_max": {
+    "60": 8,
+    "100": 8
+  },
+  "user_profile": {
+    "age": 26,
+    "gender": "女",
+    "seek": "男",
+    "city": "杭州",
+    "province": "浙江",
+    "edu": "本科"
+  },
+  "recall": {
+    "age_gap": 3,
+    "same": "city",
+    "expand_steps": [
+      {
+        "name": "年龄差放宽到 5 岁",
+        "age_gap": 5,
+        "same": "city"
+      },
+      {
+        "name": "地区放宽到同省",
+        "age_gap": 5,
+        "same": "province"
+      }
+    ],
+    "min_tags": 4,
+    "recommend_count": 3
+  },
+  "diversity": {
+    "min": 3,
+    "max": 4
+  },
+  "display": {
+    "min_tags": 4,
+    "max_tags": 6,
+    "row_chars": 18,
+    "max_rows": 2,
+    "cat_order": [
+      "教育",
+      "基础",
+      "兴趣",
+      "社交"
+    ],
+    "cat_quota": {
+      "教育": 1,
+      "基础": 1,
+      "兴趣": 2,
+      "社交": 1
+    },
+    "cat_quota_max": {
+      "教育": 1,
+      "基础": 2,
+      "兴趣": 2,
+      "社交": 2
+    }
+  },
+  "tag_lib": {
+    "e_bachelor": {
+      "text": "本科毕业",
+      "cat": "教育",
+      "kw": [
+        "本科"
+      ]
+    },
+    "e_master": {
+      "text": "硕士在读",
+      "cat": "教育",
+      "kw": [
+        "硕士"
+      ]
+    },
+    "e_master2": {
+      "text": "硕士毕业",
+      "cat": "教育",
+      "kw": [
+        "硕士"
+      ]
+    },
+    "e_phd": {
+      "text": "博士",
+      "cat": "教育",
+      "kw": [
+        "博士"
+      ]
+    },
+    "j_dev": {
+      "text": "程序员",
+      "cat": "基础",
+      "kw": [
+        "程序员",
+        "互联网"
+      ]
+    },
+    "j_design": {
+      "text": "设计师",
+      "cat": "基础",
+      "kw": [
+        "设计"
+      ]
+    },
+    "j_teacher": {
+      "text": "老师",
+      "cat": "基础",
+      "kw": [
+        "老师",
+        "教师"
+      ]
+    },
+    "j_research": {
+      "text": "研究员",
+      "cat": "基础",
+      "kw": [
+        "科研"
+      ]
+    },
+    "j_sales": {
+      "text": "销售",
+      "cat": "基础",
+      "kw": [
+        "销售"
+      ]
+    },
+    "j_editor": {
+      "text": "编辑",
+      "cat": "基础",
+      "kw": [
+        "编辑"
+      ]
+    },
+    "j_engineer": {
+      "text": "工程师",
+      "cat": "基础",
+      "kw": [
+        "工程师"
+      ]
+    },
+    "j_market": {
+      "text": "市场",
+      "cat": "基础",
+      "kw": [
+        "市场"
+      ]
+    },
+    "j_doctor": {
+      "text": "医生",
+      "cat": "基础",
+      "kw": [
+        "医生"
+      ]
+    },
+    "i_badminton": {
+      "text": "羽毛球",
+      "cat": "兴趣",
+      "kw": [
+        "运动",
+        "打球"
+      ]
+    },
+    "i_cycling": {
+      "text": "骑行",
+      "cat": "兴趣",
+      "kw": [
+        "运动",
+        "户外"
+      ]
+    },
+    "i_exhibit": {
+      "text": "看展",
+      "cat": "兴趣",
+      "kw": [
+        "文艺",
+        "艺术",
+        "展览"
+      ]
+    },
+    "i_indie": {
+      "text": "独立音乐",
+      "cat": "兴趣",
+      "kw": [
+        "文艺",
+        "音乐"
+      ]
+    },
+    "i_camp": {
+      "text": "露营",
+      "cat": "兴趣",
+      "kw": [
+        "户外"
+      ]
+    },
+    "i_photo": {
+      "text": "摄影",
+      "cat": "兴趣",
+      "kw": [
+        "文艺",
+        "拍照"
+      ]
+    },
+    "i_basket": {
+      "text": "篮球",
+      "cat": "兴趣",
+      "kw": [
+        "运动",
+        "打球"
+      ]
+    },
+    "i_gym": {
+      "text": "健身",
+      "cat": "兴趣",
+      "kw": [
+        "运动",
+        "身材"
+      ]
+    },
+    "i_bake": {
+      "text": "烘焙",
+      "cat": "兴趣",
+      "kw": [
+        "美食",
+        "做饭",
+        "厨艺"
+      ]
+    },
+    "i_run": {
+      "text": "跑步",
+      "cat": "兴趣",
+      "kw": [
+        "运动"
+      ]
+    },
+    "i_read": {
+      "text": "读书",
+      "cat": "兴趣",
+      "kw": [
+        "文艺",
+        "看书",
+        "阅读"
+      ]
+    },
+    "i_hike": {
+      "text": "爬山",
+      "cat": "兴趣",
+      "kw": [
+        "运动",
+        "户外",
+        "徒步"
+      ]
+    },
+    "i_fish": {
+      "text": "钓鱼",
+      "cat": "兴趣",
+      "kw": [
+        "户外"
+      ]
+    },
+    "i_travel": {
+      "text": "旅行",
+      "cat": "兴趣",
+      "kw": [
+        "旅游",
+        "出去玩"
+      ]
+    },
+    "i_cook": {
+      "text": "做饭",
+      "cat": "兴趣",
+      "kw": [
+        "美食",
+        "下厨",
+        "厨艺"
+      ]
+    },
+    "i_movie": {
+      "text": "看电影",
+      "cat": "兴趣",
+      "kw": [
+        "文艺",
+        "电影"
+      ]
+    },
+    "i_game": {
+      "text": "打游戏",
+      "cat": "兴趣",
+      "kw": [
+        "游戏",
+        "宅"
+      ]
+    },
+    "i_cat": {
+      "text": "养猫",
+      "cat": "兴趣",
+      "kw": [
+        "宠物",
+        "猫"
+      ]
+    },
+    "i_dog": {
+      "text": "养狗",
+      "cat": "兴趣",
+      "kw": [
+        "宠物",
+        "狗"
+      ]
+    },
+    "s_slow": {
+      "text": "慢热",
+      "cat": "社交",
+      "kw": [
+        "稳重",
+        "安静",
+        "内向"
+      ]
+    },
+    "s_chat": {
+      "text": "爱聊天",
+      "cat": "社交",
+      "kw": [
+        "开朗",
+        "外向",
+        "有趣",
+        "健谈"
+      ]
+    },
+    "s_humor": {
+      "text": "幽默",
+      "cat": "社交",
+      "kw": [
+        "有趣",
+        "开朗"
+      ]
+    },
+    "s_gentle": {
+      "text": "温柔",
+      "cat": "社交",
+      "kw": [
+        "温和",
+        "体贴",
+        "细心"
+      ]
+    },
+    "s_quiet": {
+      "text": "安静",
+      "cat": "社交",
+      "kw": [
+        "温和",
+        "内向"
+      ]
+    },
+    "s_steady": {
+      "text": "稳重",
+      "cat": "社交",
+      "kw": [
+        "靠谱",
+        "温和",
+        "成熟"
+      ]
+    }
+  },
+  "pool": [
+    {
+      "id": "c01",
+      "name": "小林",
+      "gender": "男",
+      "age": 26,
+      "city": "杭州",
+      "province": "浙江",
+      "school": "浙江大学",
+      "edu": "硕士",
+      "height": 175,
+      "smoke": "不吸",
+      "drink": "偶尔",
+      "pet": "没有养",
+      "tags": [
+        "e_master",
+        "j_research",
+        "i_badminton",
+        "i_cycling",
+        "s_slow",
+        "s_steady"
+      ]
+    },
+    {
+      "id": "c02",
+      "name": "阿遥",
+      "gender": "男",
+      "age": 25,
+      "city": "杭州",
+      "province": "浙江",
+      "school": "中国美术学院",
+      "edu": "本科",
+      "height": 172,
+      "smoke": "不吸",
+      "drink": "不喝",
+      "pet": "正在养",
+      "tags": [
+        "e_bachelor",
+        "j_design",
+        "i_exhibit",
+        "i_indie",
+        "i_cat",
+        "s_chat"
+      ]
+    },
+    {
+      "id": "c03",
+      "name": "周周",
+      "gender": "男",
+      "age": 27,
+      "city": "杭州",
+      "province": "浙江",
+      "school": "杭州电子科技大学",
+      "edu": "本科",
+      "height": 180,
+      "smoke": "偶尔",
+      "drink": "偶尔",
+      "pet": "没有养",
+      "tags": [
+        "e_bachelor",
+        "j_dev",
+        "i_camp",
+        "i_photo",
+        "i_game"
+      ]
+    },
+    {
+      "id": "c04",
+      "name": "阿哲",
+      "gender": "男",
+      "age": 28,
+      "city": "杭州",
+      "province": "浙江",
+      "school": "浙江工业大学",
+      "edu": "本科",
+      "height": 178,
+      "smoke": "经常",
+      "drink": "经常",
+      "pet": "没有养",
+      "tags": [
+        "e_bachelor",
+        "j_sales",
+        "i_basket",
+        "i_gym",
+        "s_humor"
+      ]
+    },
+    {
+      "id": "c05",
+      "name": "小满",
+      "gender": "男",
+      "age": 24,
+      "city": "杭州",
+      "province": "浙江",
+      "school": "浙江传媒学院",
+      "edu": "本科",
+      "height": 176,
+      "smoke": "不吸",
+      "drink": "偶尔",
+      "pet": "正在养",
+      "tags": [
+        "e_bachelor",
+        "j_editor",
+        "i_bake",
+        "i_dog",
+        "s_gentle"
+      ]
+    },
+    {
+      "id": "c06",
+      "name": "老陈",
+      "gender": "男",
+      "age": 29,
+      "city": "杭州",
+      "province": "浙江",
+      "school": "浙江大学",
+      "edu": "博士",
+      "height": 172,
+      "smoke": "不吸",
+      "drink": "不喝",
+      "pet": "没有养",
+      "tags": [
+        "e_phd",
+        "j_research",
+        "i_run",
+        "i_read"
+      ]
+    },
+    {
+      "id": "c07",
+      "name": "安安",
+      "gender": "男",
+      "age": 26,
+      "city": "杭州",
+      "province": "浙江",
+      "school": "杭州师范大学",
+      "edu": "本科",
+      "height": 177,
+      "smoke": "不吸",
+      "drink": "偶尔",
+      "pet": "没有养",
+      "tags": [
+        "e_bachelor",
+        "j_teacher",
+        "i_hike",
+        "i_read",
+        "s_quiet",
+        "s_gentle"
+      ]
+    },
+    {
+      "id": "c08",
+      "name": "大鹏",
+      "gender": "男",
+      "age": 27,
+      "city": "杭州",
+      "province": "浙江",
+      "school": "浙江理工大学",
+      "edu": "本科",
+      "height": 183,
+      "smoke": "偶尔",
+      "drink": "经常",
+      "pet": "正在养",
+      "tags": [
+        "e_bachelor",
+        "j_engineer",
+        "i_fish",
+        "i_dog"
+      ]
+    },
+    {
+      "id": "c09",
+      "name": "Kiki",
+      "gender": "女",
+      "age": 25,
+      "city": "杭州",
+      "province": "浙江",
+      "school": "浙江工商大学",
+      "edu": "硕士",
+      "height": 167,
+      "smoke": "不吸",
+      "drink": "偶尔",
+      "pet": "没有养",
+      "tags": [
+        "e_master",
+        "j_market",
+        "i_travel",
+        "i_photo",
+        "s_chat"
+      ]
+    },
+    {
+      "id": "c10",
+      "name": "阿亮",
+      "gender": "男",
+      "age": 23,
+      "city": "杭州",
+      "province": "浙江",
+      "school": "浙江科技大学",
+      "edu": "本科",
+      "height": 174,
+      "smoke": "不吸",
+      "drink": "不喝",
+      "pet": "没有养",
+      "tags": [
+        "e_bachelor",
+        "j_dev",
+        "i_game"
+      ]
+    },
+    {
+      "id": "c11",
+      "name": "老周",
+      "gender": "男",
+      "age": 31,
+      "city": "杭州",
+      "province": "浙江",
+      "school": "浙江大学",
+      "edu": "硕士",
+      "height": 179,
+      "smoke": "不吸",
+      "drink": "偶尔",
+      "pet": "没有养",
+      "tags": [
+        "e_master2",
+        "j_doctor",
+        "i_travel",
+        "i_cook",
+        "s_steady"
+      ]
+    },
+    {
+      "id": "c12",
+      "name": "小宋",
+      "gender": "男",
+      "age": 28,
+      "city": "宁波",
+      "province": "浙江",
+      "school": "宁波大学",
+      "edu": "本科",
+      "height": 176,
+      "smoke": "不吸",
+      "drink": "偶尔",
+      "pet": "没有养",
+      "tags": [
+        "e_bachelor",
+        "j_market",
+        "i_travel",
+        "i_movie",
+        "s_chat"
+      ]
+    },
+    {
+      "id": "c13",
+      "name": "阿杰",
+      "gender": "男",
+      "age": 27,
+      "city": "上海",
+      "province": "上海",
+      "school": "复旦大学",
+      "edu": "硕士",
+      "height": 180,
+      "smoke": "不吸",
+      "drink": "不喝",
+      "pet": "没有养",
+      "tags": [
+        "e_master2",
+        "j_dev",
+        "i_run",
+        "i_photo",
+        "s_steady"
+      ]
+    },
+    {
+      "id": "c14",
+      "name": "小雨",
+      "gender": "女",
+      "age": 26,
+      "city": "杭州",
+      "province": "浙江",
+      "school": "浙江大学",
+      "edu": "本科",
+      "height": 163,
+      "smoke": "不吸",
+      "drink": "不喝",
+      "pet": "正在养",
+      "tags": [
+        "e_bachelor",
+        "j_teacher",
+        "i_cat",
+        "i_read",
+        "s_gentle"
+      ]
+    }
+  ],
+  "rec_text": {
+    "need_lead": "按你说的，我从宇宙里给你找来了 {n} 个不同风格的{gender}。",
+    "home_lead": "我从宇宙里给你找来了 {n} 个不同风格的{gender}～",
+    "expand_note": "完全符合的人不多，我把范围放宽了一点（{steps}）。",
+    "card_question": "这{word}里面，你对谁比较心动呀～可以不止一个哦，一定要说说哪里吸引你～",
+    "card_question_one": "这位你觉得怎么样呀～一定要说说哪里吸引你～",
+    "none_found": "按你说的条件，暂时还没找到合适的人。我先多了解你一点，之后有合适的再推荐给你。",
+    "none_home": "暂时还没有可以推荐的人。我先多了解你一点，之后有合适的再推荐给你。",
+    "need_lead_one": "按你说的，我从宇宙里给你找来了一位{gender}。",
+    "home_lead_one": "我从宇宙里给你找来了一位{gender}～"
+  },
+  "lazy_ack": [
+    "好叭 🐱 {about}一时没想好也没关系～",
+    "收到～{about}先放一放，回头想到再说。",
+    "嗯哼 🐾 这个可以慢慢想，我们先往下聊。",
+    "了解～不急着回答，想到了随时补给我。",
+    "好叭 😺 那就先跳过{about}。",
+    "这个先留白，说不定聊着聊着就有答案了～"
+  ],
+  "timeouts": {
+    "P1": 4000,
+    "P2": 3000,
+    "P3": 3000,
+    "P5": 8000,
+    "P6": 20000,
+    "P7": 15000
+  },
+  "version": "v1.9-flow-P1B-v1.11-local",
+  "buttons": {
+    "p60": [
+      "继续聊聊，让LoveMi更懂我",
+      "生成画像，去首页看看"
+    ],
+    "p100": [
+      "保存画像",
+      "回到首页"
+    ]
+  },
+  "profile_bubble": "我整理好了你目前的画像，画像生成中……",
+  "fallback": {
+    "min_tags": 2,
+    "groups": {
+      "default": {
+        "name": "默认·有主见",
+        "tags": [
+          "有自己的节奏",
+          "慢慢来",
+          "不随大流"
+        ],
+        "p60": [
+          "看得出来你心里有自己的尺子，不急着把答案交出来。",
+          "你有自己的节奏，比起回答问题，更想按自己的方式慢慢来。"
+        ],
+        "core": [
+          "你习惯按自己的节奏生活，也会按自己的节奏靠近一个人。很多答案，你更愿意留给真正聊得来的人。",
+          "比起被几道问题定义，你更相信相处里慢慢看见的东西。你的答案，会在对的人面前自然展开。"
+        ],
+        "core_some": [
+          "关于你，LoveMi 已经记下了一些小线索；还没说出口的部分，就留给接下来慢慢了解。"
+        ],
+        "expect": [
+          "你没有急着列出条件，那个人的样子，也许要等遇见时才会慢慢清晰。",
+          "心里的那个 TA 还没被说出口，但能看出来，你不打算随便将就。"
+        ],
+        "daily": [
+          "生活里的你还留着很多空白，等你想分享的时候，这里会慢慢写满。",
+          "你的日常还藏着没说，像一本还没翻开的书，等合适的人一页页去读。"
+        ],
+        "love": [
+          "在关系里，你应该会先观察、再靠近，用自己的方式确认对方是不是对的人。",
+          "你不会一开始就把自己全部交出去，熟悉之后，才会慢慢露出更多面。"
+        ],
+        "merged": [
+          "期待、日常和相处的样子，你都还留着白。等遇见想多聊几句的人，再一点点补上。"
+        ]
+      },
+      "feel": {
+        "name": "相信感觉型（开场说“看感觉”）",
+        "tags": [
+          "相信眼缘",
+          "感觉派",
+          "不设限"
+        ],
+        "p60": [
+          "比起条件清单，你更相信见到人那一刻的感觉。",
+          "你没有给另一半设一堆条件，心动这件事，你想交给感觉。"
+        ],
+        "core": [
+          "你不太用条件去筛选一个人，更相信相处时那一下的心动。对的人出现时，你大概会知道。"
+        ],
+        "expect": [
+          "你没有给 TA 列条件，比起“符合要求”，你更在意彼此“对上感觉”。"
+        ]
+      },
+      "picky": {
+        "name": "标准清晰型（人物卡都没感觉）",
+        "tags": [
+          "心里有把尺",
+          "宁缺毋滥",
+          "不将就"
+        ],
+        "p60": [
+          "三位都没让你心动，看来你心里的标准很清楚，不轻易被打动。"
+        ],
+        "core": [
+          "你对喜欢这件事很认真，不会因为“还不错”就轻易心动。能让你点头的人，一定有特别打动你的地方。"
+        ],
+        "expect": [
+          "这次推荐的人都没打动你，说明你在意的点很具体，只是还没被说出来。"
+        ]
+      },
+      "boundary": {
+        "name": "有边界感型（拒答较多）",
+        "tags": [
+          "有分寸感",
+          "慢慢打开",
+          "先观察再靠近"
+        ],
+        "p60": [
+          "你对分享很有分寸，有些话要等合适的时候、合适的人才说。"
+        ],
+        "core": [
+          "你很清楚哪些话现在说、哪些话留给以后。这份分寸感，会让真正靠近你的人更安心。"
+        ],
+        "love": [
+          "在关系里，你大概会先守好自己的边界，确认安心了，才会慢慢敞开。"
+        ]
+      },
+      "chill": {
+        "name": "松弛随性型（说不清较多）",
+        "tags": [
+          "松弛感在线",
+          "随缘派",
+          "不急不躁"
+        ],
+        "p60": [
+          "你对找对象这件事挺松弛的，不急着给出标准答案。"
+        ],
+        "core": [
+          "你不太为找对象这件事焦虑，相信该来的总会来。这份松弛感，本身就挺吸引人的。"
+        ]
+      }
+    }
+  },
+  "fallback_tags": {
+    "default": [
+      "F011"
+    ],
+    "feel": [
+      "F001",
+      "F002",
+      "F003"
+    ],
+    "picky": [
+      "F006",
+      "F007"
+    ],
+    "boundary": [
+      "F008",
+      "F009",
+      "F010"
+    ],
+    "chill": [
+      "F004",
+      "F005"
+    ]
+  },
+  "tag_text": {
+    "F001": "感觉派",
+    "F002": "先有感觉",
+    "F003": "眼缘很重要",
+    "F004": "随缘派",
+    "F005": "松弛感在线",
+    "F006": "不凑合",
+    "F007": "有点小坚持",
+    "F008": "分寸感在线",
+    "F009": "先聊聊再说",
+    "F010": "热情有分寸",
+    "F011": "有点个性和态度"
+  },
+  "fallback_groups": {
+    "default": {
+      "name": "有主见（默认）",
+      "p60": [
+        "看得出来你心里有自己的尺子，不急着把答案交出来。",
+        "你有自己的节奏，比起回答问题，更想按自己的方式慢慢来。"
+      ],
+      "core": [
+        "你习惯按自己的节奏生活，也按自己的节奏靠近一个人。很多答案，你更愿意留给真正聊得来的人。",
+        "比起被几道问题定义，你更相信相处里慢慢看见的东西——你的答案，会在对的人面前自然展开。"
+      ],
+      "core_some": [
+        "关于你，LoveMi 已经记下了一些小线索；还没说出口的部分，留给接下来慢慢了解。"
+      ],
+      "expect": [
+        "你没有急着列出条件，那个人的样子，或许要等遇见时才会变得清晰。"
+      ],
+      "daily": [
+        "你的日常还藏着没说，像一本还没翻开的书，等合适的人一页页读。"
+      ],
+      "love": [
+        "在关系里，你大概会先观察、再靠近，用自己的方式确认对方值不值得。"
+      ],
+      "merged": [
+        "期待、日常和相处的样子，你都还留着白——等遇见想多聊几句的人，再一点点补上。"
+      ]
+    },
+    "feel": {
+      "name": "相信感觉型",
+      "p60": [
+        "比起条件清单，你更相信见到人那一刻的感觉。"
+      ],
+      "core": [
+        "你不太用条件去筛选一个人，更相信相处时那一下的心动。对的人出现时，你大概会知道。"
+      ],
+      "expect": [
+        "你没有给 TA 列条件清单——比起“符合要求”，你更在意“对上感觉”。"
+      ]
+    },
+    "picky": {
+      "name": "标准清晰型",
+      "p60": [
+        "这次的三位都没让你心动，看来你心里的标准很清楚。"
+      ],
+      "core": [
+        "你对喜欢这件事很认真，不会因为“还不错”就轻易心动。能让你点头的人，一定有特别打动你的地方。"
+      ],
+      "expect": [
+        "这次推荐的人都没打动你，说明你在意的点很具体，只是还没被说出来。"
+      ]
+    },
+    "boundary": {
+      "name": "有边界感型",
+      "p60": [
+        "你对分享很有分寸，有些话，要等合适的时候、合适的人才说。"
+      ],
+      "core": [
+        "你很清楚哪些话现在说、哪些话留给以后。这份分寸感，会让真正靠近你的人更安心。"
+      ],
+      "love": [
+        "在关系里，你大概会先守好自己的边界，确认安心了，才会慢慢敞开。"
+      ]
+    },
+    "chill": {
+      "name": "松弛随性型",
+      "p60": [
+        "你对找对象这件事挺松弛的，不急着给出标准答案。"
+      ],
+      "core": [
+        "你不太为找对象这件事焦虑，相信该来的总会来。这份松弛感，本身就挺吸引人的。"
+      ],
+      "love": [
+        "在关系里，你应该不太爱较劲，相处起来让人觉得轻松。"
+      ]
+    }
+  },
+  "fallback_min_tags": 2,
+  "stage_rules": {
+    "NEED": "【开场需求阶段】对 TA 的要求写 NEED（对象 TA）：吸烟、喝酒、同城、学历、宠物用枚举；年龄写原话里的范围（如“25-30”“比我大”）；身高写数字（如“175以上”）；性格、兴趣、其他要求用开放文本，多个词用顿号分开。两个人怎么相处写 Q8（对象 关系），不写 NEED。\nstrength：只有明确的底线才是“硬性”（“必须”“一定”“不能”“不接受”“绝对不要”“不要妈宝”这类明确拒绝），其余（“想找”“最好”“希望”“喜欢”或没说程度）都是“偏好”；拿不准标“偏好”。\n顺带说到自己的信息照常记到自己的字段。只说“看感觉”“没什么要求”而没有别的内容时，answer_status=nothing_to_add；后面还有具体内容就照常提取。\n提供了【标签清单】时，能对上清单的另外输出 need_tag_ids（只用清单里的 ID）。",
+    "CARD": "【人物卡阶段】卡片上不显示字母编号，用户会用名字（“小林”）、序号（“第一个 / 第二个 / 最后一个”）或特征（“那个程序员”“会摄影的那位”）指代某个人。按【人物卡】里的顺序和信息对应到编号，CARD.l1 的值写编号（A / B / C）；对应不上就不写，按说不清处理。追问时用名字称呼，不用编号。\n先判断用户这句话属于哪一层：\n- L1：只说了喜欢谁（喜欢几位就输出几条 CARD.l1），或只说“都没感觉 / 都还行”。\n- 笼统 L2：给了理由，但很笼统（“好看”“顺眼”“有感觉”“舒服”），或理由是名字、谐音、玩笑。记 L1，笼统理由可以记进 CARD.l2，但 card_level 仍按 L1 处理。\n- 具体 L2：说出了这个人身上具体的点（性格、兴趣、卡片上的信息，如“温柔、会烘焙”）。\n- L3：明确说出对另一半的要求（“我就想找个稳重的人”），写 NEED（对象 TA）。\n对某个人的好感不能升级成要求，也不能把卡片上的标签当成用户自己的偏好。\ncard_followup：L1 和笼统 L2 时 needed=true，优先自然了解对这个人的其他具体印象或感兴趣的方面，不强迫解释已经表达的好感（笼统的“这种”可进一步问清指什么）；具体 L2 尚未明确择偶语义时，needed=true，建议自然确认一次“找另一半时也会在意这一点吗”；用户已经说清具体吸引点时，不再要求解释同一理由，而是换到该特点在择偶中的意义；多选时，只要有一位的理由是笼统的，就针对那一位追问一次（例如“那小林呢，除了长得好看，还有其他让你感兴趣的地方吗？”）；不能仅因为所有人的理由都具体就设 needed=false；只有已明确表达择偶偏好、触发下述停止条件，或该确认点已经问过且没有新的有价值信息时才停止。L3、拒答、说不清、重复上一句时 needed=false。“都没感觉”时可以问一句这几位哪里没对上。\n\n【话术库人物反馈追问示例】\n以下示例只用于理解表达方式，称呼须换成当前人物卡的真实名字，不能照抄示例身份或特征。L1 只记录好感，L2 只记录用户实际评价的特点，L3 须有明确的择偶语义或关系期待；允许直接表达 L3，不强制逐级推进。是否追问仍遵守上述 card_followup 规则和系统额度，不为凑次数提问。\n\nL1 第一感觉\n用户：“我觉得 小林 挺顺眼的，第一眼还不错。”\n可参考的问法：“小林 有点吸引你诶。除了第一眼的感觉，还有什么地方让你想认识 TA 吗？”\n\nL2 具体特征评价\n用户：“小林 喜欢露营和徒步，这点我还挺喜欢的，感觉一起出去玩会很有意思。”\n可参考的问法：“听起来你还挺喜欢这种一起探索的感觉。那找对象的时候，你也会在意这一点吗？”\n\nL3 明确伴侣期待\n用户：“我还挺希望另一半也喜欢户外的，周末可以一起出去走走。”\n处理：不再追问该信息点，直接记录并进入下一题。\n\n【人物卡中的跨题事实】“我也喜欢音乐”等明确描述自己的话，同时提取 Q1.items（对象自己）；CARD.l2 记录具体吸引点，两者不能互相替代。用户只是评价候选人爱音乐、未明确说自己也喜欢时，不提取用户兴趣。",
+    "default": "（本题没有专属规则）",
+    "SUP": "【补充问题】把回答记到 SELF 对应的子项（开放文本，20 字以内概括原话）；这类问题不追问。回答里顺带说到的其他信息照常提取。"
+  },
+  "p1_variant_default": "B",
+  "related_fields": {
+    "NEED": [
+      "NEED"
+    ],
+    "CARD_L1": [
+      "CARD"
+    ],
+    "LIFE": [
+      "Q1",
+      "Q2",
+      "Q3"
+    ],
+    "RHYTHM": [
+      "Q2",
+      "Q1"
+    ],
+    "REL": [
+      "Q4",
+      "Q8",
+      "Q11",
+      "Q3"
+    ],
+    "Q5": [
+      "Q5",
+      "Q1"
+    ],
+    "Q7": [
+      "Q7"
+    ],
+    "Q6": [
+      "Q6",
+      "Q1"
+    ],
+    "Q9": [
+      "Q9",
+      "Q2"
+    ],
+    "Q10": [
+      "Q10",
+      "Q8"
+    ],
+    "Q12": [],
+    "SUP1": [
+      "Q3",
+      "Q4",
+      "SELF"
+    ],
+    "SUP2": [
+      "Q1",
+      "SELF"
+    ],
+    "SUP3": [
+      "Q8",
+      "Q11",
+      "NEED",
+      "SELF"
+    ],
+    "SUP4": [
+      "Q1",
+      "SELF"
+    ]
+  },
+  "intro": {
+    "hello": "嗨，你好呀～我是 LoveMi，你的 AI 关系军师。",
+    "guide": "接下来，我会边听边问，慢慢认识你，也了解你的生活和期待的另一半，准备好了吗～？"
+  },
+  "p60_bubble": "等我一下～我把刚刚聊到的你，拼成一张小卡片 🐾",
+  "p60_card": {
+    "insight_min": 20,
+    "insight_max": 35,
+    "tags_min": 3,
+    "tags_max": 4
+  },
+  "supplements": [
+    "SUP1",
+    "SUP2",
+    "SUP3",
+    "SUP4"
+  ],
+  "pace": {
+    "S60": {
+      "min_answered": 5,
+      "trigger": "end"
+    },
+    "S40": {
+      "min_answered": 5,
+      "trigger": "before:Q12"
+    },
+    "max_supplements": 1
+  },
+  "care_ack": [
+    "抱抱你，最近一定挺不容易的。想说的时候随时跟我说，我一直在～",
+    "听起来你最近有点累，先照顾好自己哦。我们慢慢聊，不着急～"
+  ],
+  "intro_ack": {
+    "question": [
+      "就是几个关于生活和感情的小问题，几分钟就好～",
+      "我会边聊边了解你，不用准备，想到什么说什么～"
+    ],
+    "hesitate": [
+      "不用紧张～就当和朋友聊天。",
+      "没关系，我们轻松聊，想到哪说到哪～"
+    ],
+    "other": [
+      "好嘞～",
+      "收到～"
+    ]
+  }
+}

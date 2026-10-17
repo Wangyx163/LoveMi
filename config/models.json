@@ -1,0 +1,51 @@
+{
+  "provider": {
+    "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "api_key_env": "MODEL_API_KEY",
+    "response_format_json": false
+  },
+  "nodes": {
+    "P1": {
+      "model": "deepseek-v4.1-flash",
+      "temperature": 0.2,
+      "max_tokens": 1600,
+      "timeout_ms": 60000,
+      "enable_thinking": false
+    },
+    "P1B": {
+      "model": "deepseek-v4.1-flash",
+      "temperature": 0.25,
+      "max_tokens": 1900,
+      "timeout_ms": 60000,
+      "enable_thinking": false
+    },
+    "P3": {
+      "model": "deepseek-v4.1-flash",
+      "temperature": 0.35,
+      "max_tokens": 200,
+      "timeout_ms": 60000,
+      "enable_thinking": false
+    },
+    "P5": {
+      "model": "deepseek-v4.1-flash",
+      "temperature": 0.45,
+      "max_tokens": 250,
+      "timeout_ms": 60000,
+      "enable_thinking": false
+    },
+    "P6": {
+      "model": "deepseek-v4.1-flash",
+      "temperature": 0.4,
+      "max_tokens": 8192,
+      "timeout_ms": 180000,
+      "enable_thinking": true
+    },
+    "P7": {
+      "model": "deepseek-v4.1-flash",
+      "temperature": 0.4,
+      "max_tokens": 8192,
+      "timeout_ms": 180000,
+      "enable_thinking": true
+    }
+  }
+}
