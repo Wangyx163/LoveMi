@@ -1,4 +1,4 @@
-# LoveMi AI 注册｜v1.9 原流程 + P1B v1.11（本地部署版）
+# LoveMi AI 注册｜v1.9 原流程 + P1B v1.11（本地 / Vercel）
 
 项目现包含独立的手机端前台。首页是 `index.html`，按参考图实现紫色渐变聊天、猫咪、人物卡、60% 阶段卡和 100% 完整画像卡。已有路由、模型理解与画像生成继续使用原引擎，调试工作台单独保留。
 
@@ -7,6 +7,8 @@
 仅检查界面时，可访问 `/?preview=chat`、`/?preview=cards`、`/?preview=60`、`/?preview=100`。这些地址展示固定的视觉样例，真实聊天请使用不带 preview 参数的首页。
 
 **上传 GitHub 不会自动启动网站。** 仓库里的 `index.html` 是网页入口；真实模型聊天需要同时运行 Node 后端。GitHub Pages 只能展示静态页面与视觉样例，不能执行 `/api/model`。部署到支持 Node.js 的服务时，启动命令为 `npm start`，设置 `HOST=0.0.0.0`，端口可由平台的 `PORT` 环境变量指定。也可构建随包 Dockerfile：`docker build -t lovemi .`，再运行 `docker run --rm -p 8768:8768 lovemi`。
+
+**Vercel 已有独立适配。** `vercel.json` 构建浏览器文件到 `public/`，`api/model.js` 与 `api/status.js` 自动部署为 Node Functions，复用本地网关。Vercel 不运行 `npm start`，也不需要常驻监听端口。之前直接上传静态页面时没有 `/api/model` 函数，因此能打开页面却无法调用模型。
 
 猫咪素材与来源见 `assets/README.md`。
 
@@ -34,6 +36,18 @@ node server.js
 
 - **模拟回放：** 无需模型，直接选择场景，按“下一句”或“播放到底”。验证的是 v1.9 节点逻辑。
 - **真实模型：** 自己在左下角输入「开始」，按实际流程回答。后端会按每个节点调用你配置的模型。页面右侧可查看节点轨迹、模型输出和状态。
+
+### 部署到 Vercel
+
+导入本仓库，Root Directory 选择包含 `package.json` 的项目根目录。Framework Preset 使用 **Other**，保留仓库 `vercel.json` 中的构建设置：Build Command 为 `node scripts/build-public.js`，Output Directory 为 `public`。已有项目更新后重新部署最新提交；若曾手动覆盖构建目录或框架，请恢复以上设置。
+
+后端函数包含 `config/models.json` 和本次已授权随私有仓库提交的 `.env`，静态目录只复制指定前端文件，不包含密钥和后端源文件。Vercel 项目中的 `MODEL_API_KEY`、`MODEL_API_BASE` 环境变量优先于 `.env`，可以直接在项目 Settings → Environment Variables 中覆盖；修改后重新部署。保留 `fluid: true` 与函数 `maxDuration: 210`，给 P6/P7 的 180 秒网关超时留下返回响应的时间。
+
+部署后先访问 `/api/status`，应返回 `ok: true`、`key_configured: true` 和六个节点模型名称；这里不会返回 Key。再回到不带 `preview` 参数的首页发送消息。界面预览页使用固定示例，不执行真实聊天。调试工作台仍可通过 `/debug/` 访问。
+
+本地检查可运行 `npm run build` 和 `node tests/test_vercel.js`；它们验证静态构建、函数入口、Vercel 预解析请求体、环境覆盖与密钥隔离，不依赖线上部署，也不消耗模型额度。实际域名的网络、模型账户权限和 Vercel 部署日志需在对应项目中确认。
+
+平台行为参考 [Vercel Node.js Functions](https://vercel.com/docs/functions/runtimes/node-js)、[项目配置](https://vercel.com/docs/project-configuration/vercel-json) 与 [函数运行时长](https://vercel.com/docs/functions/limitations)。
 
 ## 2. 单独配置模型
 
@@ -92,6 +106,7 @@ node tests/run_demo.js A         # 模拟完整注册流程
 node tests/run_demo.js B         # 模拟 60% 直接生成画像
 node tests/test_local_gateway.js # 本地模型调用网关集成测试（模拟上游，不消耗真实 Key）
 node tests/test_routing_edges.js # 7 项跳题、旧会话、阶段入口、P3 与测试框架边界检查
+node tests/test_vercel.js        # Vercel 函数适配、请求体与公开构建保护检查
 ```
 
 这里的自动测试主要覆盖**路由、状态机、契约和模型代理通路**；不代表已经验证 P1B 的中文承接自然度、字段提取准确率或真实模型延迟。真模型需自行配置并运行。

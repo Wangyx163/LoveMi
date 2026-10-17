@@ -9,3 +9,5 @@ tests
 artifacts
 output
 tmp
+public
+.vercel

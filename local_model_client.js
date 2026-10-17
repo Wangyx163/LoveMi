@@ -1,4 +1,4 @@
-/* Local node model adapter: never sends API keys to the browser. */
+/* Same-origin model adapter for local and cloud deployments. */
 window.lovemiLocalModel = async function ({id,pid,sys,user,tier},signal) {
   let response;
   try {
@@ -9,7 +9,7 @@ window.lovemiLocalModel = async function ({id,pid,sys,user,tier},signal) {
       signal
     });
   } catch(e) {
-    const error=new Error('无法连接本地服务：'+(e.message||e));error.code='unavailable';throw error;
+    const error=new Error('无法连接聊天服务：'+(e.message||e));error.code='unavailable';throw error;
   }
   const result=await response.json().catch(()=>({error:'服务器返回格式异常'}));
   if (!response.ok) {

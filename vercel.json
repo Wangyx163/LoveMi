@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "node scripts/build-public.js",
+  "outputDirectory": "public",
+  "fluid": true,
+  "functions": {
+    "api/*.js": {
+      "includeFiles": "{config/models.json,.env}",
+      "maxDuration": 210
+    }
+  }
+}

@@ -27,12 +27,47 @@ function json(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
   res.end(JSON.stringify(data));
 }
-function readJson(req) {
-  return new Promise((resolve,reject) => {
-    let size = 0, raw = '';
-    req.on('data', chunk => { size += chunk.length; if (size > MAX_BODY_BYTES) { reject(Object.assign(new Error('请求体过大'),{status:413})); req.destroy(); return; } raw += chunk.toString('utf8'); });
-    req.on('end', () => { try { resolve(JSON.parse(raw)); } catch { reject(Object.assign(new Error('JSON 格式错误'), {status:400})); } });
-    req.on('error', reject);
+function bodyError(status, message) { return Object.assign(new Error(message), {status}); }
+async function readJson(req) {
+  const length = Number(req.headers?.['content-length']);
+  if (Number.isFinite(length) && length > MAX_BODY_BYTES) throw bodyError(413, '请求体过大');
+  const parse = raw => {
+    if (raw.length > MAX_BODY_BYTES) throw bodyError(413, '请求体过大');
+    try { return JSON.parse(raw.toString('utf8')); }
+    catch { throw bodyError(400, 'JSON 格式错误'); }
+  };
+  // Vercel may have already consumed the stream and exposes body through a getter.
+  // Read it once, handle malformed JSON, and apply the same byte limit as locally.
+  let body;
+  try { body = req.body; }
+  catch { throw bodyError(400, 'JSON 格式错误'); }
+  if (body !== undefined) {
+    if (Buffer.isBuffer(body)) return parse(body);
+    if (typeof body === 'string') return parse(Buffer.from(body, 'utf8'));
+    let encoded;
+    try { encoded = JSON.stringify(body); }
+    catch { throw bodyError(400, 'JSON 格式错误'); }
+    if (typeof encoded !== 'string') throw bodyError(400, 'JSON 格式错误');
+    return parse(Buffer.from(encoded, 'utf8'));
+  }
+  return new Promise((resolve, reject) => {
+    let size = 0, settled = false;
+    const chunks = [];
+    const fail = error => { if (!settled) { settled = true; reject(error); } };
+    req.on('data', chunk => {
+      if (settled) return;
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, 'utf8');
+      size += bytes.length;
+      if (size > MAX_BODY_BYTES) return fail(bodyError(413, '请求体过大'));
+      chunks.push(bytes);
+    });
+    req.on('end', () => {
+      if (settled) return;
+      try { const parsed = parse(Buffer.concat(chunks, size)); settled = true; resolve(parsed); }
+      catch (error) { fail(error); }
+    });
+    req.on('error', fail);
+    req.on('aborted', () => fail(bodyError(400, '请求已中断')));
   });
 }
 function completionText(output) {
@@ -66,6 +101,7 @@ async function handleModel(req, res) {
   const url = completionURL(provider);
   const secretName = provider.api_key_env || 'MODEL_API_KEY';
   const apiKey = process.env[secretName] || '';
+  if (!apiKey) return json(res,503,{error:`模型服务未配置密钥，请设置 ${secretName}`});
   const timeout = Math.min(180000, Math.max(1000, Number(spec.timeout_ms) || 30000));
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), timeout);
@@ -142,18 +178,19 @@ function allowedOrigin(req) {
   try {
     const source = new URL(origin);
     if (!['http:', 'https:'].includes(source.protocol) || source.origin !== origin) return false;
-    if (source.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(source.hostname)) return true;
-    const host = new URL('http://' + req.headers.host).host;
+    const target = new URL('http://' + req.headers.host);
+    if (source.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(source.hostname) && ['127.0.0.1', 'localhost'].includes(target.hostname)) return true;
+    const host = target.host;
     // HTTPS is commonly terminated by the deployment platform before reaching Node.
     // The hostname and port must still match this request; no arbitrary CORS origin is allowed.
     return source.host === host;
   } catch { return false; }
 }
-const server = http.createServer(async (req,res) => {
+async function requestHandler(req,res) {
   try {
     const pathname = requestPath(req);
     if (req.method==='GET' && pathname==='/api/status') {
-      const c=modelConfig();return json(res,200,{ok:true,version:'v1.9+P1B-v1.11',nodes:Object.fromEntries(Object.entries(c.nodes||{}).map(([p,x])=>[p,x.model])),api_base:c.provider?.api_base});
+      const c=modelConfig();return json(res,200,{ok:true,version:'v1.9+P1B-v1.11',nodes:Object.fromEntries(Object.entries(c.nodes||{}).map(([p,x])=>[p,x.model])),api_base:process.env.MODEL_API_BASE||c.provider?.api_base,key_configured:Boolean(process.env[c.provider?.api_key_env||'MODEL_API_KEY'])});
     }
     if (req.method==='POST' && pathname==='/api/model') {
       if (!allowedOrigin(req)) return json(res,403,{error:'模型接口只允许同源页面或本地页面访问'});
@@ -169,9 +206,10 @@ const server = http.createServer(async (req,res) => {
     }
     return json(res,404,{error:'Not found'});
   } catch(e) {if(!res.headersSent)json(res,e.status||500,{error:e.message||'服务器内部错误'});}
-});
+}
+const server = http.createServer(requestHandler);
 if (require.main === module) {
   if (!Number.isInteger(PORT) || PORT<1 || PORT>65535) throw new Error('PORT 无效');
   server.listen(PORT, HOST, () => console.log(`LoveMi v1.9 + P1B v1.11: http://${HOST}:${PORT}`));
 }
-module.exports={server,completionURL,completionText,allowedOrigin,requestPath,publicFile};
+module.exports={server,requestHandler,readJson,completionURL,completionText,allowedOrigin,requestPath,publicFile};

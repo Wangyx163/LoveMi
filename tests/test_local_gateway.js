@@ -83,11 +83,12 @@ async function availablePort(){
   const deployed=await request('/api/model',{method:'POST',headers:{Host:'lovemi.example',Origin:'https://lovemi.example','Content-Type':'application/json'},body:modelInput});assert.equal(deployed.status,200,deployed.text);
   const deployedPort=await request('/api/model',{method:'POST',headers:{Host:'lovemi.example:8080',Origin:'https://lovemi.example:8080','Content-Type':'application/json'},body:modelInput});assert.equal(deployedPort.status,200,deployedPort.text);
   const localhost=await request('/api/model',{method:'POST',headers:{Origin:'http://localhost:8768','Content-Type':'application/json'},body:modelInput});assert.equal(localhost.status,200);
-  for(const origin of ['https://unrelated.example','https://lovemi.example.attacker.test','https://lovemi.example:444','null','file://']){
+  for(const origin of ['https://unrelated.example','https://lovemi.example.attacker.test','https://lovemi.example:444','http://localhost:8768','null','file://']){
    const denied=await request('/api/model',{method:'POST',headers:{Host:'lovemi.example',Origin:origin,'Content-Type':'application/json'},body:modelInput});assert.equal(denied.status,403,origin);
   }
   const missing=await request('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"pid":"UNKNOWN","sys":"a","user":"b"}'});assert.equal(missing.status,400);
   const invalid=await request('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"pid":'});assert.equal(invalid.status,400);
+  const oversized=await request('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pid:'P1B',sys:'你'.repeat(90000),user:'test'})});assert.equal(oversized.status,413);
   console.log('✓ 网关集成通过：首页与调试入口、前端静态资源、路径保护、六节点模型代理、部署同源校验');
  }finally{
   gateway.kill();
