@@ -88,24 +88,84 @@ async function handleModel(req, res) {
     return json(res,502,{error:e.name==='AbortError'?`模型调用超时（${timeout} ms）`:(e?.message || '模型调用失败')});
   } finally {clearTimeout(timer);}
 }
-// Only serve required browser assets; never expose .env, config/models.json, or server source.
-const PAGE = path.join(ROOT, 'LoveMi_在线测试版_v1.9.html');
-const CLIENT = path.join(ROOT, 'local_model_client.js');
+// Only serve the public application files. In particular, .env and model configuration
+// stay on the server even when this application is deployed behind a reverse proxy.
+const PUBLIC_FILES = new Map([
+  ['/', 'index.html'],
+  ['/index.html', 'index.html'],
+  ['/debug', 'LoveMi_在线测试版_v1.9.html'],
+  ['/debug/', 'LoveMi_在线测试版_v1.9.html'],
+  ['/LoveMi_在线测试版_v1.9.html', 'LoveMi_在线测试版_v1.9.html'],
+  ['/local_model_client.js', 'local_model_client.js'],
+  ['/src/engine.js', 'src/engine.js'],
+  ['/data/config.json', 'data/config.json'],
+  ['/data/prompts.json', 'data/prompts.json']
+]);
+const CONTENT_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.ico': 'image/x-icon'
+};
+function requestPath(req) {
+  const raw = (req.url || '/').split('?')[0];
+  if (!raw.startsWith('/')) throw Object.assign(new Error('Invalid path'), {status: 400});
+  let pathname;
+  try { pathname = decodeURIComponent(raw); }
+  catch { throw Object.assign(new Error('Invalid path encoding'), {status: 400}); }
+  if (pathname.includes('\\') || pathname.includes('\0') || pathname.split('/').some(part => part === '.' || part === '..')) {
+    throw Object.assign(new Error('Not found'), {status: 404});
+  }
+  return pathname;
+}
+function publicFile(pathname) {
+  const exact = PUBLIC_FILES.get(pathname);
+  if (exact) return path.join(ROOT, exact);
+  if (!/^\/assets\/(?:[a-z0-9][a-z0-9_.-]*\/)*[a-z0-9][a-z0-9_.-]*\.(?:css|js|png|webp|svg|jpe?g|ico)$/i.test(pathname)) return null;
+  const absolute = path.resolve(ROOT, '.' + pathname);
+  const assetsRoot = path.join(ROOT, 'assets') + path.sep;
+  if (!absolute.startsWith(assetsRoot)) return null;
+  // Also prevent a symlink in assets from pointing at private files outside assets.
+  try { if (!fs.realpathSync(absolute).startsWith(fs.realpathSync(path.join(ROOT, 'assets')) + path.sep)) return null; }
+  catch { return null; }
+  return absolute;
+}
+function allowedOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true; // Non-browser clients do not send an Origin header.
+  try {
+    const source = new URL(origin);
+    if (!['http:', 'https:'].includes(source.protocol) || source.origin !== origin) return false;
+    if (source.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(source.hostname)) return true;
+    const host = new URL('http://' + req.headers.host).host;
+    // HTTPS is commonly terminated by the deployment platform before reaching Node.
+    // The hostname and port must still match this request; no arbitrary CORS origin is allowed.
+    return source.host === host;
+  } catch { return false; }
+}
 const server = http.createServer(async (req,res) => {
   try {
-    const pathname = new URL(req.url, `http://${HOST}:${PORT}`).pathname;
+    const pathname = requestPath(req);
     if (req.method==='GET' && pathname==='/api/status') {
       const c=modelConfig();return json(res,200,{ok:true,version:'v1.9+P1B-v1.11',nodes:Object.fromEntries(Object.entries(c.nodes||{}).map(([p,x])=>[p,x.model])),api_base:c.provider?.api_base});
     }
     if (req.method==='POST' && pathname==='/api/model') {
-      const origin=req.headers.origin;
-      if (origin && !/^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?$/.test(origin)) return json(res,403,{error:'本地模型接口只允许本地页面访问'});
+      if (!allowedOrigin(req)) return json(res,403,{error:'模型接口只允许同源页面或本地页面访问'});
       return await handleModel(req,res);
     }
-    if (req.method === 'GET' && ['/', '/index.html','/LoveMi_在线测试版_v1.9.html','/local_model_client.js'].includes(pathname)) {
-      const js=pathname==='/local_model_client.js';
-      res.writeHead(200,{'Content-Type':js?'application/javascript; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
-      return res.end(fs.readFileSync(js?CLIENT:PAGE));
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      const file = publicFile(pathname);
+      if (file && fs.existsSync(file) && fs.statSync(file).isFile()) {
+        const body = fs.readFileSync(file);
+        res.writeHead(200, {'Content-Type': CONTENT_TYPES[path.extname(file).toLowerCase()], 'Content-Length': body.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'});
+        return res.end(req.method === 'HEAD' ? undefined : body);
+      }
     }
     return json(res,404,{error:'Not found'});
   } catch(e) {if(!res.headersSent)json(res,e.status||500,{error:e.message||'服务器内部错误'});}
@@ -114,4 +174,4 @@ if (require.main === module) {
   if (!Number.isInteger(PORT) || PORT<1 || PORT>65535) throw new Error('PORT 无效');
   server.listen(PORT, HOST, () => console.log(`LoveMi v1.9 + P1B v1.11: http://${HOST}:${PORT}`));
 }
-module.exports={server,completionURL,completionText};
+module.exports={server,completionURL,completionText,allowedOrigin,requestPath,publicFile};

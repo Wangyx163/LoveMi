@@ -1,0 +1,11 @@
+.git
+.codex
+.agents
+node_modules
+*.log
+.publish-*
+docs
+tests
+artifacts
+output
+tmp

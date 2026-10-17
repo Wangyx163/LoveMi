@@ -1,5 +1,15 @@
 # LoveMi AI 注册｜v1.9 原流程 + P1B v1.11（本地部署版）
 
+项目现包含独立的手机端前台。首页是 `index.html`，按参考图实现紫色渐变聊天、猫咪、人物卡、60% 阶段卡和 100% 完整画像卡。已有路由、模型理解与画像生成继续使用原引擎，调试工作台单独保留。
+
+运行 `npm start`（Windows PowerShell 可用 `npm.cmd start`，或双击 `start_windows.bat`），打开 **http://127.0.0.1:8768/**；调试工作台打开 **http://127.0.0.1:8768/debug**。聊天会在本机浏览器保留，保存画像后也可再次查看。
+
+仅检查界面时，可访问 `/?preview=chat`、`/?preview=cards`、`/?preview=60`、`/?preview=100`。这些地址展示固定的视觉样例，真实聊天请使用不带 preview 参数的首页。
+
+**上传 GitHub 不会自动启动网站。** 仓库里的 `index.html` 是网页入口；真实模型聊天需要同时运行 Node 后端。GitHub Pages 只能展示静态页面与视觉样例，不能执行 `/api/model`。部署到支持 Node.js 的服务时，启动命令为 `npm start`，设置 `HOST=0.0.0.0`，端口可由平台的 `PORT` 环境变量指定。也可构建随包 Dockerfile：`docker build -t lovemi .`，再运行 `docker run --rm -p 8768:8768 lovemi`。
+
+猫咪素材与来源见 `assets/README.md`。
+
 **本项目沿用你上传的 v1.9 参考实现流程。** 题目主线、进度权重、节点与模拟人物继续使用既有配置；原 85 项流程用例扩展为 89 项，另补 7 项路由边界检查。增量变更如下：
 
 - `P1B` 替换为已经确认的 **v1.11 承接 Few-shot + 人物卡自然追问**版本。

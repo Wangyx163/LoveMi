@@ -1,0 +1,13 @@
+{
+  "name": "lovemi",
+  "version": "1.9.11",
+  "private": true,
+  "description": "LoveMi relationship chat interface and model gateway",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/run_tests.js && node tests/test_routing_edges.js && node tests/test_local_gateway.js"
+  }
+}
