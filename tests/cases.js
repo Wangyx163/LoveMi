@@ -139,9 +139,36 @@ const CASES=[
  steps:[...OPEN],
  check:c=>[c.ok(c.st.cards.every(x=>x.tags.length>=4&&x.tags.length<=6),'每人 4～6 个标签'),c.eq(c.st.rec.pair_diffs,[4,4,4],'三人两两差异点都是 4'),c.eq(c.st.rec.diversity_ok,true,'符合 3～4')]},
 
-{cat:'开场需求轮',off:0,noReady:true,name:'“准备好了吗”之后按类别承接',desc:'提问类、犹豫类、其他三类，各用固定承接，再发需求题',
- steps:[['开始',{}],['要聊多久呀？',{}],['重新开始',{}],['有点紧张',{}],['重新开始',{}],['好的',{}]],
+{cat:'开场需求轮',off:0,noReady:true,name:'“准备好了吗”之后按类别承接',desc:'提问类、犹豫类、其他类，各用固定承接，再发需求题',
+ steps:[['开始',{}],['要聊多久呀？',{}],['重新开始',{}],['有点紧张',{}],['重新开始',{}],['你好',{}]],
  check:c=>[c.ok(/几分钟就好|不用准备/.test(c.reply(1)),'提问类'),c.ok(/不用紧张|轻松聊/.test(c.reply(3)),'犹豫类'),c.ok(/^(好嘞|收到)～/.test(c.reply(5)),'其他'),c.has(c.reply(5),'你心中理想的另一半','承接后接需求题')]},
+...['好了','好的','ok','ＯＫ！','可以的','嗯嗯，可以啦～','我已经准备好了','那就开始吧','可以，你问吧','没问题 👍','ready'].map(answer=>({
+ cat:'开场接受意愿',off:0,noReady:true,name:'接受同义表达：'+answer,
+ steps:[['开始',{}],[answer,{}]],
+ check:c=>[c.eq(c.st.intro_class,'accept','识别高接受意愿'),c.eq(c.st.current.task,'NEED','进入完整需求题'),
+   c.ok(c.reply(1).startsWith('那就开始啦～想到什么都可以和我说，说得越具体，我就越懂你～'),'使用指定承接'),
+   c.eq((c.reply(1).match(/那就开始啦/g)||[]).length,1,'开场承接只出现一次'),
+   c.has(c.reply(1),'你心中理想的另一半','保留问题'),c.has(c.reply(1),'比如说外形、生活状态','保留问题说明'),c.ok(!c.ran(1,'N04'),'不调用理解模型')]
+})),
+...[
+ ['还没准备好','hesitate'],['还没好','hesitate'],['不可以','hesitate'],['不行，等一下','hesitate'],['我没想好，稍等','hesitate'],
+ ['not ready','hesitate'],['nope','hesitate'],['好了，但我现在没空','hesitate'],['ok，不过不方便','hesitate'],['好，但先别问','hesitate'],['可以吗？','question'],['好了，要聊多久？','question'],
+ ['开始前我想问几个问题','question'],['天气好了','other']
+].map(([answer,expected])=>({
+ cat:'开场接受意愿',off:0,noReady:true,name:'保留否定、提问与闲聊：'+answer,
+ steps:[['开始',{}],[answer,{}]],
+ check:c=>[c.eq(c.st.intro_class,expected,'不按肯定词误判接受意愿'),c.eq(c.st.current.task,'NEED','保留原有开场推进逻辑')]
+})),
+...[
+ ['连续语气字','嗯'.repeat(20000)+'x'],['重复开场前缀','那我们'.repeat(10000)+'x']
+].map(([name,answer])=>({
+ cat:'开场接受意愿',off:0,noReady:true,name:'长无效输入保持响应：'+name,
+ steps:[['开始',{}],[answer,{}]],
+ check:c=>[c.eq(c.st.intro_class,'other','不将大量前缀中的确认片段视作同意'),c.eq(c.st.current.task,'NEED','仍能完成开场路由')]
+})),
+{cat:'开场接受意愿',off:0,noReady:true,name:'相同短句仅在等待开场确认时按接受处理',
+ steps:[['开始',{}],['ok',{}],['ok',{N04:U('unclear')}]],
+ check:c=>[c.ok(c.ran(2,'N04'),'进入需求题后交给正常回答理解'),c.eq(c.st.tasks.NEED.a,1,'正常结算需求回答'),c.ok(!c.reply(2).includes('那就开始啦'),'不重复开场承接')]},
 {cat:'开场需求轮',off:0,name:'人物卡不显示字母，给模型的卡片信息带顺序',desc:'用户会说名字、第几个；给理解模型的卡片信息写明“第几位（编号）”',
  steps:[...OPEN,['第二个吧',{N04:U('answered',[['CARD','l1','候选反馈','B','第二个吧']],{card_level:'L1',card_followup:{needed:true,question:'小满身上哪一点吸引你呀？'}})}]],
  check:c=>[c.ok(!/^[ABC]  /m.test(c.reply(1)),'卡片展示不带字母'),c.has(c.modelInput(2,'N04').cards_text,'第2位（编号 B）','卡片信息带顺序和编号'),c.eq(c.active('CARD.l1'),'B','“第二个”对应到 B')]},

@@ -73,6 +73,26 @@ function prefilter(cfg,ui,task){const t=String(ui||'').trim();
   return '';}
 const inputLimit=(cfg,task)=>cfg.max_input_chars[task]??cfg.max_input_chars.default;
 
+// 仅用于等待开场回应的上下文；先排除提问、否定和犹豫，再识别自然的同意表达。
+const INTRO_ACCEPT='那就开始啦～想到什么都可以和我说，说得越具体，我就越懂你～';
+const INTRO_ACCEPT_PREFIXES=['那我们','我们','那就','已经','现在','完全','当然','没事','嗯','恩','哦','噢','那','我','都'];
+const INTRO_ACCEPT_WORDS=new Set(['准备好','准备好了','准备好的','好','好了','好的','好哒','好滴','好嘞','可以','可以了','可以的','行','行了','行的','没问题','没有问题','没毛病','同意','愿意','开始','开始了','开聊','聊','聊起来','来','你问','你开始问','ok','okk','okay','yes','yep','sure','ready','letsgo','goahead']);
+function introAcceptClause(t){
+  if(/^[嗯恩]+$/.test(t))return true;
+  let start=0,end=t.length;
+  // 最长前缀优先，每步只移动游标；重复语气词不会触发正则回溯。
+  while(start<end){const prefix=INTRO_ACCEPT_PREFIXES.find(p=>t.startsWith(p,start));if(!prefix)break;start+=prefix.length;}
+  while(end>start&&'呀啊呢哦喔哟啦吧嗯恩'.includes(t[end-1]))end--;
+  return INTRO_ACCEPT_WORDS.has(t.slice(start,end));
+}
+function introClass(ui){
+  const t=String(ui||'').normalize('NFKC').toLowerCase().trim();
+  if(/[？?]|吗|什么|多久|怎么|几个|几分钟/.test(t))return 'question';
+  if(/还没|没好|没准备|等等|等一下|等会|稍等|晚点|待会|以后再|紧张|不知道|没想好|害羞|不太会|不行|不可以|不能|不想|暂时不|先不|别开始|没空|不方便|别问|没时间|not\s+(?:yet|ready|now)|\b(?:no|nope)\b/.test(t))return 'hesitate';
+  const clauses=t.replace(EMOJI,'').split(/[，,。.!！;；～~\n]/).map(s=>s.replace(/\s+/g,'').replace(/[“”‘’"']/g,''));
+  return clauses.some(introAcceptClause)?'accept':'other';
+}
+
 /* ---------- N02 ---------- */
 function N02(cfg,stateJson,ui){
   ui=String(ui||'').trim(); let st=null;
@@ -99,10 +119,12 @@ function N02(cfg,stateJson,ui){
     else if(ui.includes('首页')||ui.includes('匹配')){st.stage='DONE';reply='（Demo）回到首页。真实环境以首页实际到达为准。';}
     else reply=`回复「${cfg.buttons.p100[0]}」或「${cfg.buttons.p100[1]}」。`;
   } else if(st.stage==='INTRO'){
-    // “准备好了吗”之后，用户回什么都直接进入需求题（脚本原文，不调模型）
-    const IA=cfg.intro_ack||{},t=String(ui||'');const cls=/[？?]|吗|什么|多久|怎么|几个|几分钟/.test(t)?'question':(/还没|等等|等一下|紧张|不知道|没想好|害羞|不太会/.test(t)?'hesitate':'other');
-    const ackL=IA[cls]||[];const ack=ackL.length?ackL[(st.turn||0)%ackL.length]:'';
-    const q=(ack?ack+'\n\n':'')+cfg.tasks.NEED.script;st.intro_class=cls;st.stage='S60';st.current={task:'NEED',qtype:'MAIN',text:cfg.tasks.NEED.core,qid:'q1'};st.history.push({task:'NEED',qtype:'MAIN',text:cfg.tasks.NEED.core});reply=q;
+    // 开场回应按语义选择承接；确认后直接进入需求题，不调用模型。
+    const IA=cfg.intro_ack||{},cls=introClass(ui);
+    const ackL=IA[cls]||(cls==='accept'?[INTRO_ACCEPT]:[]);const ack=ackL.length?ackL[(st.turn||0)%ackL.length]:(cls==='accept'?INTRO_ACCEPT:'');
+    const parts=String(cfg.tasks.NEED.script||'').split(/\n\s*\n/);
+    if(cls==='accept'&&[INTRO_ACCEPT,ack].includes(parts[0].trim()))parts.shift();
+    const q=[ack,...parts].filter(Boolean).join('\n\n');st.intro_class=cls;st.stage='S60';st.current={task:'NEED',qtype:'MAIN',text:cfg.tasks.NEED.core,qid:'q1'};st.history.push({task:'NEED',qtype:'MAIN',text:cfg.tasks.NEED.core});reply=q;
   } else if(st.stage==='S40'&&st.current&&st.current.task==='Q12'){
     // 最后一题只采集、不处理：原话直接入库（不调理解模型），然后生成画像
     st.turn+=1;const t=ui.trim();
