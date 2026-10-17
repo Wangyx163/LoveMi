@@ -1,0 +1,5 @@
+# .env is intentionally tracked for this private deployment.
+.env.*
+!.env.example
+*.log
+.publish-*
