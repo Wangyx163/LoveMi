@@ -1063,7 +1063,7 @@ const PNAMES={P1:'【工程】P1 A 当前版 · ⑤ 回答理解（含承接）�
 const KIND={code:['代码','k-code'],model:['大模型','k-model'],if:['选择器','k-if'],agg:['变量聚合','k-agg'],out:['输出','k-out'],start:['开始','k-start'],end:['结束','k-end'],assign:['变量赋值','k-assign']};
 const LS={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
 let cfg=(()=>{try{return JSON.parse(LS.get('lm_cfg_v10'))||clone(DEFAULT_CONFIG)}catch(e){return clone(DEFAULT_CONFIG)}})();
-const QUESTION_BANK_REVISION='2026-10-17-workbook-2-v2';
+const QUESTION_BANK_REVISION='2026-10-17-workbook-2-v3';
 if(LS.get('lm_question_bank_revision')!==QUESTION_BANK_REVISION){
   cfg.tasks=cfg.tasks||{};
   const taskFields={
@@ -1073,15 +1073,16 @@ if(LS.get('lm_question_bank_revision')!==QUESTION_BANK_REVISION){
     Q6:['script','core','fallback','about'],Q9:['script','core','fallback','about'],
     Q10:['script','core','fallback','about'],Q12:['script','core','fallback','about']
   };
-  for(const id of ['SUP1','SUP2','SUP3','SUP4'])taskFields[id]=['theme','goal','key_semantics','fallback','script','core','scenes','min_info','about','profile_target'];
+  for(const id of ['SUP1','SUP2','SUP3','SUP4'])taskFields[id]=['script','core','fallback','about'];
   for(const [id,fields] of Object.entries(taskFields)){
     if(!cfg.tasks[id])cfg.tasks[id]=clone(DEFAULT_CONFIG.tasks[id]);
     else for(const key of fields)cfg.tasks[id][key]=clone(DEFAULT_CONFIG.tasks[id][key]);
   }
   cfg.rec_text=cfg.rec_text||{};
   for(const key of ['card_question','card_question_one'])cfg.rec_text[key]=DEFAULT_CONFIG.rec_text[key];
-  cfg.stage_rules=cfg.stage_rules||{};
-  cfg.stage_rules.CARD=DEFAULT_CONFIG.stage_rules.CARD;
+  cfg.intro=cfg.intro||{};
+  cfg.intro.hello=DEFAULT_CONFIG.intro.hello;
+  cfg.intro.guide=DEFAULT_CONFIG.intro.guide;
   LS.set('lm_cfg_v10',JSON.stringify(cfg));
   LS.set('lm_question_bank_revision',QUESTION_BANK_REVISION);
 }
