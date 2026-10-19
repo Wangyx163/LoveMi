@@ -98,7 +98,7 @@ function N02(cfg,stateJson,ui){
   ui=String(ui||'').trim(); let st=null;
   try{st=stateJson?JSON.parse(stateJson):null;if(!st||st.v!==1)st=null;}catch(e){st=null;}
   if(st){st.tasks=st.tasks||{};for(const tid in cfg.tasks)if(!st.tasks[tid])st.tasks[tid]=newTaskState();}
-  let branch='STATIC',reply='',qSpec='',forcedUnd='',contQ='';if(st)st._care=false;
+  let branch='STATIC',reply='',qSpec='',forcedUnd='',contQ='';if(st){st._care=false;st._und={};}
   if(!st||ui==='重新开始'||ui==='/reset'){st=newState(cfg);
     st.stage='INTRO';st.current=null;reply=cfg.intro.hello+'\n\n'+cfg.intro.guide;
   } else if(ui==='退出'&&['S60','S40','AWAIT_60'].includes(st.stage)){st.stage='EXITED';st.current=null;reply='好，我们先聊到这里。对话会保留，不会生成中途画像。（回复「重新开始」可重新测试）';}
@@ -289,13 +289,17 @@ function N15(cfg,llmOut,specStr,isFinal){const sp=parseLoose(specStr);
 // 口头关怀：只是一句温暖的承接，放在下一条回复最前面
 function careLine(cfg,st){if(!st._care)return '';st._care=false;const L=cfg.care_ack||[];return L.length?L[(st.turn||0)%L.length]:'';}
 const replyParagraph=text=>String(text||'').replace(/\s*[\r\n]+\s*/g,'').trim();
-function N23(cfg,stateStr,q){const st=JSON.parse(stateStr);q=replyParagraph(q);const und=st._und||{};
-  // 承接（已并入 ⑤ 的输出）：轻量校验；敷衍且没有可回应的内容时，用固定的猫系模板
-  let ack=String(und.ack||'').trim();if(ack.length>30||/[？?]/.test(ack)||cfg.blocked.compliance.some(w=>ack.includes(w)))ack='';
-  const prevTask=(st.current||{}).task;
-  const care=careLine(cfg,st);if(care){ack=care;const pl=st.plan||{};if(pl.action==='ASK_NEXT'&&cfg.tasks[pl.task]&&cfg.tasks[pl.task].core)q=cfg.tasks[pl.task].core;}   // 关怀之后去掉脚本里欢快的过渡句，只问问题本身
-  else if(und.answer_status==='unclear'&&prevTask){const L=cfg.lazy_ack,recent=st.lazy_recent||[];const pool=L.map((x,i)=>i).filter(i=>!recent.includes(i));const pick=pool[(st.turn||0)%pool.length];
-    st.lazy_recent=[...recent,pick].slice(-2);ack=L[pick].replace('{about}',(cfg.tasks[prevTask]||{}).about||'这个');}
+function selectAck(cfg,st){
+  const care=careLine(cfg,st);if(care)return {text:replyParagraph(care),care:true};
+  const und=st._und||{};
+  if(!und.answer_status||und.parse_ok===false)return {text:'',care:false};
+  const ack=replyParagraph(und.ack);
+  const valid=ack&&[...ack].length<=25&&!/[？?]/.test(ack)&&!cfg.blocked.compliance.some(w=>ack.includes(w));
+  return {text:valid?ack:'嗯，我们接着聊～',care:false};
+}
+function N23(cfg,stateStr,q){const st=JSON.parse(stateStr);q=replyParagraph(q);
+  const selected=selectAck(cfg,st),ack=selected.text;
+  if(selected.care){const pl=st.plan||{};if(pl.action==='ASK_NEXT'&&cfg.tasks[pl.task]&&cfg.tasks[pl.task].core)q=replyParagraph(cfg.tasks[pl.task].core);}   // 关怀之后去掉脚本里欢快的过渡句，只问问题本身
   const plan=st.plan||{},n=st.history.length+1;
   if(plan.action==='HOLD'){st._new=[];return {reply:q+`\n\n— 画像进度 ${Math.floor((st.progress||0)+0.5)}%`,new_state:S(st)};}
   st.current={task:plan.task,qtype:plan.qtype,text:q,qid:'q'+n};st.history.push({task:plan.task,qtype:plan.qtype,text:q});st._new=[];
@@ -439,7 +443,8 @@ function N36(cfg,stateStr){const st=JSON.parse(stateStr);const me=cfg.user_profi
     body.push((cnt===1?(mode==='need'?T.need_lead_one:T.home_lead_one):(mode==='need'?T.need_lead:T.home_lead)).replace('{n}',cnt).replace('{gender}',gender),'','【Demo 模拟人物，仅用于测试】');
     cards.forEach(c=>{const hit=mode==='need'&&c.filter_hit.count?`　满足 ${c.filter_hit.count} 个筛选条件`:'';body.push(`${c.name} · ${c.age} · ${c.city} · ${c.school}${hit}`);c.rows.forEach(r=>body.push('    '+r.map(x=>'#'+x).join('  ')));});
     body.push('',q);}
-  st.progress=progressOf(cfg,st);st._new=[];const care=careLine(cfg,st);if(care)body.unshift(care,'');
+  st.progress=progressOf(cfg,st);st._new=[];const ack=selectAck(cfg,st).text;
+  if(cnt===0)body=[ack+replyParagraph(body.join(''))];else if(ack)body[0]=ack+body[0];
   return {reply:body.join('\n')+`\n\n— 画像进度 ${Math.floor(st.progress+0.5)}%`,new_state:S(st),mode};}
 
 const p1Vars=r2=>({user_input:r2.user_text,stage:r2.stage,budget_left:r2.budget_left,cur_q:r2.cur_q,cur_task:r2.cur_task,next_hint:r2.next_hint,cur_task_slim:r2.cur_task_slim,next_hint_slim:r2.next_hint_slim,stage_rules:r2.stage_rules,cards_text:r2.cards_text,field_dict:r2.field_dict,facts_text:r2.facts_text,recent_dialog:r2.recent_dialog,tag_catalog:r2.tag_catalog});

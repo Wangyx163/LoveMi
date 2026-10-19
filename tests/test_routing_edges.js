@@ -7,7 +7,7 @@ const {runCase}=require('./runner');
 const root=path.join(__dirname,'..');
 const cfg=JSON.parse(fs.readFileSync(path.join(root,'data/config.json'),'utf8'));
 const prompts=JSON.parse(fs.readFileSync(path.join(root,'data/prompts.json'),'utf8'));
-const api=vm.runInNewContext(fs.readFileSync(path.join(root,'src/engine.js'),'utf8')+'\n({newState,N02,N11,N15,N23,covered,missing,runTurn});',{performance:require('node:perf_hooks').performance});
+const api=vm.runInNewContext(fs.readFileSync(path.join(root,'src/engine.js'),'utf8')+'\n({newState,N02,N11,N15,N23,N36,covered,missing,runTurn});',{performance:require('node:perf_hooks').performance});
 let passed=0;
 function check(name,fn){fn();passed++;console.log('✓ '+name);}
 function fact(field,sub,subject){return {field,sub,subject,value:'已知',active:true,status:'已确认',src:'LIFE'};}
@@ -67,12 +67,56 @@ check('解释后重问和 P3 引子重问同段输出，核心问题不丢失',(
  const st=api.newState(cfg);st.current={task:'Q6',qtype:'MAIN',text:cfg.tasks.Q6.core};
  st._und={answer_status:'asks_back'};st.plan={action:'REASK',task:'Q6',qtype:'MAIN',prefix:'我想了解你的消费习惯呀～',hold:1};
  const body=api.N23(cfg,JSON.stringify(st),cfg.tasks.Q6.core).reply.split('\n\n— 画像进度')[0];
- assert(!/[\r\n]/.test(body));assert.equal(body.replace(/\s/g,''),(st.plan.prefix+cfg.tasks.Q6.core).replace(/\s/g,''));
+ assert(!/[\r\n]/.test(body));assert.equal(body.replace(/\s/g,''),('嗯，我们接着聊～'+st.plan.prefix+cfg.tasks.Q6.core).replace(/\s/g,''));
  const lead='我们想象一个场景～';const spec=JSON.stringify({mode:'lead',core:cfg.tasks.Q6.core});
  const question=api.N15(cfg,JSON.stringify({lead}),spec,false).q_text;
  st._und={answer_status:'answered',ack:'买东西时你会先看看实际需要～'};st.plan={action:'REPLACE_LATER',task:'Q6',qtype:'REPLACE'};
  const replacement=api.N23(cfg,JSON.stringify(st),question).reply.split('\n\n— 画像进度')[0];
  assert(!/[\r\n]/.test(replacement));assert.equal(replacement.replace(/\s/g,''),(st._und.ack+lead+cfg.tasks.Q6.core).replace(/\s/g,''));
+});
+check('有效承接不依赖事实或回答状态，简短回答和拒答不会被模板覆盖',()=>{
+ const ack='好，这个话题就先放一放～';
+ for(const answer_status of ['answered','unclear','refused','nothing_to_add']){
+  const st=api.newState(cfg);st.current={task:'Q6',qtype:'FOLLOW_UP',text:cfg.tasks.Q6.core};
+  st._und={answer_status,parse_ok:true,ack};st.plan={action:'ASK_NEXT',task:'Q9',qtype:'MAIN'};
+  const body=api.N23(cfg,JSON.stringify(st),cfg.tasks.Q9.core).reply.split('\n\n— 画像进度')[0];
+  assert.equal(st.facts.length,0);assert.equal(body,ack+cfg.tasks.Q9.core,answer_status+' 应使用本轮有效承接');
+ }
+});
+check('承接按25个Unicode字符校验，超长或提问仅使用中性兜底',()=>{
+ const render=(ack,extra={})=>{const st=api.newState(cfg);st.current={task:'Q6',qtype:'MAIN',text:cfg.tasks.Q6.core};
+  st._und={answer_status:'answered',parse_ok:true,ack,...extra};st.plan={action:'ASK_NEXT',task:'Q9',qtype:'MAIN'};
+  return api.N23(cfg,JSON.stringify(st),cfg.tasks.Q9.core).reply.split('\n\n— 画像进度')[0];};
+ const maxAck='好'.repeat(24)+'🐾';assert.equal([...maxAck].length,25);
+ assert.equal(render(maxAck),maxAck+cfg.tasks.Q9.core,'25字符承接不能因emoji占两个UTF-16单元被误删');
+ for(const ack of ['好'.repeat(26),'那你喜欢什么呀？','真的这样吗?'])assert.equal(render(ack),'嗯，我们接着聊～'+cfg.tasks.Q9.core);
+ assert.equal(render(''),'嗯，我们接着聊～'+cfg.tasks.Q9.core,'无合规承接时不虚构用户没想好');
+ assert.equal(render('',{parse_ok:false}),cfg.tasks.Q9.core,'模型解析失败时不伪装成正常承接');
+});
+check('出卡及无候选分支都展示本轮承接，关怀仍优先',()=>{
+ const ack='嗯，你更看重相处时的舒服～';
+ for(const pool of [cfg.pool,[]]){
+  const localCfg={...cfg,pool};const st=api.newState(localCfg);st.current={task:'NEED',qtype:'MAIN',text:cfg.tasks.NEED.core};
+  st._und={answer_status:'refused',parse_ok:true,ack};
+  const reply=api.N36(localCfg,JSON.stringify(st)).reply;
+  assert(reply.startsWith(ack));assert(!/^[\r\n]/.test(reply.slice(ack.length)),'承接和首段应连续');
+  const noAck=api.newState(localCfg);noAck.current=st.current;noAck._und={};
+  assert(!api.N36(localCfg,JSON.stringify(noAck)).reply.includes('嗯，我们接着聊～'),'没有本轮理解时不凭空生成承接');
+ }
+ const care=api.newState(cfg);care.current={task:'NEED',qtype:'MAIN',text:cfg.tasks.NEED.core};care._care=true;
+ care._und={answer_status:'risk',parse_ok:true,ack};
+ const reply=api.N36(cfg,JSON.stringify(care)).reply;
+ assert(!reply.includes(ack));assert(cfg.care_ack.some(line=>reply.startsWith(line)),'关怀应优先于普通承接');
+});
+check('本轮承接不会跨输入重放，60%继续按钮不复用历史承接',()=>{
+ const st=ready40(),oldAck='历史回答已经回应过了～';st._und={answer_status:'unclear',parse_ok:true,ack:oldAck};
+ const entry=api.N02(cfg,JSON.stringify(st),'继续聊');assert.equal(entry.branch,'CONTINUE_40');
+ const next=JSON.parse(entry.state);assert(!next._und?.ack);assert(!next._und?.answer_status);
+ const reply=api.N23(cfg,entry.state,entry.cont_q).reply;
+ assert(!reply.includes(oldAck));assert(!reply.includes('嗯，我们接着聊～'));
+ const answering=api.newState(cfg);answering.current={task:'Q6',qtype:'MAIN',text:cfg.tasks.Q6.core};answering._und=st._und;
+ const nextAnswer=api.N02(cfg,JSON.stringify(answering),'看使用的频率');assert.equal(nextAnswer.branch,'ANSWER');
+ assert(!JSON.parse(nextAnswer.state)._und?.ack,'新回答须等待本轮理解，不能沿用旧ack');
 });
 (async()=>{
  const st=api.newState(cfg);st.stage='S40';st.current={task:'Q6',qtype:'FOLLOW_UP',text:'那要是预算够的时候，你会怎么判断值不值得买呀？'};
