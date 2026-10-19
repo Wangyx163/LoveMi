@@ -3,6 +3,7 @@
 const {spawn}=require('node:child_process');
 const http=require('node:http');
 const assert=require('node:assert/strict');
+const fs=require('node:fs');
 const path=require('node:path');
 const BASE=path.join(__dirname,'..');
 let testPort;
@@ -48,7 +49,10 @@ async function availablePort(){
   const status=await request('/api/status');assert.equal(JSON.parse(status.text).ok,true);assert(!status.text.includes('api_key'));
   const root=await request('/');assert.equal(root.status,200);assert(root.text.includes('LoveMi'));
   const index=await request('/index.html');assert.equal(index.text,root.text);
-  const debug=await request('/debug');assert.equal(debug.status,200);assert(debug.text.includes('这样过周末，听起来还挺舒服的～'));
+  const debug=await request('/debug');assert.equal(debug.status,200);
+  const servedPromptDefaults=debug.text.match(/^const DEFAULT_PROMPTS = (.*);$/m);
+  assert(servedPromptDefaults,'debug page must include prompt defaults');
+  assert.deepEqual(JSON.parse(servedPromptDefaults[1]),JSON.parse(fs.readFileSync(path.join(BASE,'data/prompts.json'),'utf8')),'debug prompt defaults must match runtime prompts');
   assert.notEqual(root.text,debug.text,'home page must be the user interface, separate from the debug page');
   const oldDebug=await request('/'+encodeURIComponent('LoveMi_在线测试版_v1.9.html'));assert.equal(oldDebug.text,debug.text);
   for(const [target,contentType] of [

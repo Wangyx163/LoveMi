@@ -373,7 +373,7 @@ function N32(cfg,stateStr,outRel,outLife){const st=JSON.parse(stateStr);const re
   if(ok(core,60))src.core='model';
   else{const c60=st.stage_card_60||{};core=(c60.content_status==='ok'||(c60.attitude&&!c60.fallback_group))?c60.attitude:'';src.core=core?'60%':'fallback';
     if(!core)core=info?fbText(cfg,st,'core_some'):fbText(cfg,st,'core');}
-  const expect=pick('expect_ta',rel.expect_ta,80,['NEED','Q8']),daily=pick('daily',life.daily,110,['Q1','Q2','Q3','Q5','Q6','Q7']),love=pick('love_style',rel.love_style,100,['Q4','Q9','Q10','Q11']);
+  const expect=pick('expect_ta',rel.expect_ta,90,['NEED','Q8']),daily=pick('daily',life.daily,110,['Q1','Q2','Q3','Q5','Q6','Q7']),love=pick('love_style',rel.love_style,100,['Q4','Q9','Q10','Q11']);
   const tags=withFallbackTags(cfg,st,(st.tags||{})['100']||[]);const tagLine=tags.length?tags.map(t=>'#'+t.text).join('  '):'';
   const care=careLine(cfg,st);const lines=[...(care?[care,'']:[]),'【我的画像】','','核心洞察',core,''];
   if(!expect&&!daily&&!love){lines.push(fbText(cfg,st,'merged'),'');if(tagLine)lines.push(tagLine,'');}

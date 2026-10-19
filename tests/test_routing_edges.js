@@ -7,11 +7,20 @@ const {runCase}=require('./runner');
 const root=path.join(__dirname,'..');
 const cfg=JSON.parse(fs.readFileSync(path.join(root,'data/config.json'),'utf8'));
 const prompts=JSON.parse(fs.readFileSync(path.join(root,'data/prompts.json'),'utf8'));
-const api=vm.runInNewContext(fs.readFileSync(path.join(root,'src/engine.js'),'utf8')+'\n({newState,N02,N11,N15,N23,N36,covered,missing,runTurn});',{performance:require('node:perf_hooks').performance});
+const api=vm.runInNewContext(fs.readFileSync(path.join(root,'src/engine.js'),'utf8')+'\n({newState,N02,N11,N15,N23,N32,N36,covered,missing,runTurn});',{performance:require('node:perf_hooks').performance});
 let passed=0;
 function check(name,fn){fn();passed++;console.log('✓ '+name);}
 function fact(field,sub,subject){return {field,sub,subject,value:'已知',active:true,status:'已确认',src:'LIFE'};}
 function ready40(){const st=api.newState(cfg);st.stage='AWAIT_60';st.facts=[fact('Q5','has_pet','自己'),fact('Q7','smoke','自己'),fact('Q7','drink','自己'),fact('Q6','style','自己'),fact('Q9','balance','关系'),fact('Q10','openness','关系')];return st;}
+check('P6 的伴侣期待在新版90字上限内保留模型原文，超过上限仍兜底',()=>{
+ const st=api.newState(cfg);st.facts=[{...fact('NEED','traits','TA'),value:'有耐心',evidence:'希望对方有耐心'}];
+ const expect='你理想中的 TA，有自己的生活和喜欢做的事，也能理解你偶尔忙得顾不上回消息。不必时时刻刻黏在一起，各自忙碌时能互相体谅，难得有空了，也愿意一起吃顿饭，好好享受两个人的时间。';
+ assert(expect.length>80&&expect.length<=90);
+ const render=text=>JSON.parse(api.N32(cfg,JSON.stringify(st),JSON.stringify({core:'你有自己的生活节奏。',expect_ta:text,love_style:''}),JSON.stringify({daily:''})).new_state).profile;
+ const accepted=render(expect);assert.equal(accepted.expect_ta,expect);assert.equal(accepted.source.expect_ta,'model');
+ const overlong=render(expect+'有时间也能一起慢慢计划以后。');
+ assert.equal(overlong.source.expect_ta,'template');assert(overlong.expect_ta.length<=90);assert(!overlong.expect_ta.includes('有时间也能一起慢慢计划以后'));
+});
 check('相处最小信息同时校验字段和对象，包括矛盾附注',()=>{
  const st=api.newState(cfg);st.facts=[fact('Q4','pace','TA')];
  assert.equal(api.covered(cfg,st,'REL'),false);assert(api.missing(cfg,st,'REL').includes('Q4.pace'));
