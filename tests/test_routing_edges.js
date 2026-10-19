@@ -41,6 +41,27 @@ check('阶段卡只识别明确的画像动作，不对关键词做子串匹配'
  for(const text of ['我还没完成','我不想生成画像','继续聊'])assert.equal(api.N02(cfg,JSON.stringify(ready40()),text).branch,'CONTINUE_40');
  for(const text of [cfg.buttons.p60[1],'生成画像','直接完成'])assert.equal(api.N02(cfg,JSON.stringify(ready40()),text).branch,'PROFILE');
 });
+check('开场各分支使用配置承接，接受时只去共用开头而保留完整需求正文',()=>{
+ for(const [input,kind] of [['ok','accept'],['要聊多久呀？','question'],['有点紧张','hesitate'],['你好','other']]){
+  const opened=api.N02(cfg,'','开始'),result=api.N02(cfg,opened.state,input),state=JSON.parse(result.state);
+  const ack=cfg.intro_ack[kind][0],body=kind==='accept'?cfg.tasks.NEED.script.replace(/^那就开始啦～\s*/,''):cfg.tasks.NEED.script;
+  assert.equal(result.branch,'STATIC');assert.equal(state.intro_class,kind);assert(result.reply_static.startsWith(ack));
+  assert(result.reply_static.endsWith(body),'不能为去重而丢失首段实际问句或第二段说明');
+  assert.equal((result.reply_static.match(/那就开始啦/g)||[]).length,1,'开头只能出现一次');
+  assert.equal(state.current.task,'NEED');assert.equal(state.current.text,cfg.tasks.NEED.core,'当前问题使用core，展示正文使用script');
+ }
+});
+check('人物卡人数变化采用配置中的单人或多人问句',()=>{
+ const baseline=api.N36(cfg,JSON.stringify(api.newState(cfg))),selected=JSON.parse(baseline.new_state).cards;
+ assert(selected.length>=3,'基准配置应足够展示三位候选人');
+ const pool=selected.map(card=>cfg.pool.find(person=>person.id===card.id));
+ for(const count of [1,2,3]){
+  const localCfg={...cfg,pool:pool.slice(0,count)},result=api.N36(localCfg,JSON.stringify(api.newState(localCfg))),state=JSON.parse(result.new_state);
+  const question=count===1?cfg.rec_text.card_question_one:cfg.rec_text.card_question.replace('{word}',count===2?'两个人':'三个人');
+  assert.equal(state.cards.length,count);assert.equal(state.current.task,'CARD_L1');assert.equal(state.current.text,question);
+  assert(result.reply.includes(question),'展示问句应与对应人数的配置一致');
+ }
+});
 check('P3 按 4～22 字、单句和句尾校验，失败时仅发核心句',()=>{
  const spec=JSON.stringify({mode:'lead',core:cfg.tasks.REL.core});
  for(const lead of ['嗯。','啊'.repeat(22)+'。','我们想象一个场景','先想想。再说说～'])assert.equal(api.N15(cfg,JSON.stringify({lead}),spec,false).pass,false);
@@ -70,7 +91,7 @@ check('REL配置脚本保留两段，承接接在过渡段且当前题仍为REL'
  const parts=submitted.reply.split('\n\n— 画像进度')[0].split('\n\n');
  assert.equal(parts.length,2,'保留脚本显式分段，而非拆开ack或把全部内容压成一段');
  const expected=cfg.tasks.REL.script.split(/\r?\n\s*\r?\n/);
- assert.equal(parts[0],ack+expected[0]);assert.equal(parts[1],cfg.tasks.REL.core);
+ assert.equal(parts[0],ack+expected[0]);assert.equal(parts[1],expected[1]);
  assert.equal(next.current.task,'REL');assert.equal(next.current.qtype,'MAIN');assert.equal(next.current.text,cfg.tasks.REL.script);
  st.plan={action:'FOLLOW_UP',task:'LIFE',qtype:'FOLLOW_UP'};
  const dynamic=api.N23(cfg,JSON.stringify(st),cfg.tasks.REL.script).reply.split('\n\n— 画像进度')[0];

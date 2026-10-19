@@ -9,7 +9,7 @@ async function runCase(cs,cfg,prompts,runTurn){
     stateJson=r.newState;replies.push(r.reply);traces.push(trace);states.push(r.newState);}
   const st=JSON.parse(stateJson);const off=cs.off===undefined?1:cs.off;const M=i=>idx[i+off];const P=i=>JSON.parse(states[M(i)]);
   const out=(id,i)=>{const t=traces[M(i)].find(x=>x.id===id);return t?t.output:null;};
-  const c={st,
+  const c={cfg,st,
     reply:i=>replies[M(i)]||'',prog:i=>P(i).progress,plan:i=>P(i).plan||{},plans:()=>idx.map(i=>JSON.parse(states[i]).plan),statesRaw:()=>idx.slice(cs.off===undefined?1:cs.off).map(i=>states[i]),
     action:i=>{const o=out('N11',i);return o?o.action:(P(i).plan||{}).action;},
     ran:(i,id)=>!!traces[M(i)].find(x=>x.id===id),

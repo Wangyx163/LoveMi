@@ -23,11 +23,12 @@
   }
   function addIntroReply(text){
     // The opening acknowledgement is separate; the question and its explanation stay together.
-    const paragraphs=String(config.tasks.NEED.script||'').split(/\r?\n\s*\r?\n/).map(part=>part.trim()).filter(Boolean);
-    const question=paragraphs.slice(1).join('\n\n');
-    if(question&&text.endsWith(question)){
-      const lead=text.slice(0,-question.length).trim();
-      if(lead)addMessage({role:'bot',text:lead});
+    text=String(text||'');const boundary=/\r?\n[ \t]*\r?\n/.exec(text);
+    const lead=boundary?text.slice(0,boundary.index).trim():'';
+    const question=boundary?text.slice(boundary.index+boundary[0].length).trim():'';
+    const isAck=Object.values(config.intro_ack||{}).some(list=>Array.isArray(list)&&list.includes(lead));
+    if(isAck&&question){
+      addMessage({role:'bot',text:lead});
       addMessage({role:'bot',text:question});
     }else addMessage({role:'bot',text});
   }

@@ -123,7 +123,11 @@ function N02(cfg,stateJson,ui){
     const IA=cfg.intro_ack||{},cls=introClass(ui);
     const ackL=IA[cls]||(cls==='accept'?[INTRO_ACCEPT]:[]);const ack=ackL.length?ackL[(st.turn||0)%ackL.length]:(cls==='accept'?INTRO_ACCEPT:'');
     const parts=String(cfg.tasks.NEED.script||'').split(/\n\s*\n/);
-    if(cls==='accept'&&[INTRO_ACCEPT,ack].includes(parts[0].trim()))parts.shift();
+    if(cls==='accept'){
+      const first=parts[0].trim();
+      if([INTRO_ACCEPT,ack].includes(first))parts.shift();
+      else{const opening=ack.match(/^[^～。！？!?]+[～。！？!?]/)?.[0];if(opening&&first.startsWith(opening))parts[0]=first.slice(opening.length).trimStart();}
+    }
     const q=[ack,...parts].filter(Boolean).join('\n\n');st.intro_class=cls;st.stage='S60';st.current={task:'NEED',qtype:'MAIN',text:cfg.tasks.NEED.core,qid:'q1'};st.history.push({task:'NEED',qtype:'MAIN',text:cfg.tasks.NEED.core});reply=q;
   } else if(st.stage==='S40'&&st.current&&st.current.task==='Q12'){
     // 最后一题只采集、不处理：原话直接入库（不调理解模型），然后生成画像
