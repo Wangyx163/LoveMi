@@ -289,6 +289,11 @@ function N15(cfg,llmOut,specStr,isFinal){const sp=parseLoose(specStr);
 // 口头关怀：只是一句温暖的承接，放在下一条回复最前面
 function careLine(cfg,st){if(!st._care)return '';st._care=false;const L=cfg.care_ack||[];return L.length?L[(st.turn||0)%L.length]:'';}
 const replyParagraph=text=>String(text||'').replace(/\s*[\r\n]+\s*/g,'').trim();
+function replyQuestion(cfg,plan,text){
+  text=String(text||'').trim();const task=cfg.tasks[plan.task]||{};
+  const scripted=['ASK_NEXT','SUPPLEMENT'].includes(plan.action)&&[task.script,task.fallback].some(script=>typeof script==='string'&&script.trim()===text);
+  return scripted?text.split(/\r?\n\s*\r?\n/).map(replyParagraph).filter(Boolean).join('\n\n'):replyParagraph(text);
+}
 function selectAck(cfg,st){
   const care=careLine(cfg,st);if(care)return {text:replyParagraph(care),care:true};
   const und=st._und||{};
@@ -297,7 +302,7 @@ function selectAck(cfg,st){
   const valid=ack&&[...ack].length<=25&&!/[？?]/.test(ack)&&!cfg.blocked.compliance.some(w=>ack.includes(w));
   return {text:valid?ack:'嗯，我们接着聊～',care:false};
 }
-function N23(cfg,stateStr,q){const st=JSON.parse(stateStr);q=replyParagraph(q);
+function N23(cfg,stateStr,q){const st=JSON.parse(stateStr);q=replyQuestion(cfg,st.plan||{},q);
   const selected=selectAck(cfg,st),ack=selected.text;
   if(selected.care){const pl=st.plan||{};if(pl.action==='ASK_NEXT'&&cfg.tasks[pl.task]&&cfg.tasks[pl.task].core)q=replyParagraph(cfg.tasks[pl.task].core);}   // 关怀之后去掉脚本里欢快的过渡句，只问问题本身
   const plan=st.plan||{},n=st.history.length+1;

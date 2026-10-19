@@ -63,6 +63,19 @@ check('普通承接和含内部换行的问题同段输出，问题内容完整'
  const body=api.N23(cfg,JSON.stringify(st),question).reply.split('\n\n— 画像进度')[0];
  assert(!/[\r\n]/.test(body));assert.equal(body.replace(/\s/g,''),(st._und.ack+question).replace(/\s/g,''));
 });
+check('REL配置脚本保留两段，承接接在过渡段且当前题仍为REL',()=>{
+ const st=api.newState(cfg);st.current={task:'LIFE',qtype:'FOLLOW_UP',text:'通常自己打还是和朋友一起呀？'};
+ const ack='嗯，知道啦～';st._und={answer_status:'answered',parse_ok:true,ack};st.plan={action:'ASK_NEXT',task:'REL',qtype:'MAIN'};
+ const submitted=api.N23(cfg,JSON.stringify(st),cfg.tasks.REL.script),next=JSON.parse(submitted.new_state);
+ const parts=submitted.reply.split('\n\n— 画像进度')[0].split('\n\n');
+ assert.equal(parts.length,2,'保留脚本显式分段，而非拆开ack或把全部内容压成一段');
+ const expected=cfg.tasks.REL.script.split(/\r?\n\s*\r?\n/);
+ assert.equal(parts[0],ack+expected[0]);assert.equal(parts[1],cfg.tasks.REL.core);
+ assert.equal(next.current.task,'REL');assert.equal(next.current.qtype,'MAIN');assert.equal(next.current.text,cfg.tasks.REL.script);
+ st.plan={action:'FOLLOW_UP',task:'LIFE',qtype:'FOLLOW_UP'};
+ const dynamic=api.N23(cfg,JSON.stringify(st),cfg.tasks.REL.script).reply.split('\n\n— 画像进度')[0];
+ assert(!/[\r\n]/.test(dynamic),'动态追问即便带空行也不自行分段');
+});
 check('解释后重问和 P3 引子重问同段输出，核心问题不丢失',()=>{
  const st=api.newState(cfg);st.current={task:'Q6',qtype:'MAIN',text:cfg.tasks.Q6.core};
  st._und={answer_status:'asks_back'};st.plan={action:'REASK',task:'Q6',qtype:'MAIN',prefix:'我想了解你的消费习惯呀～',hold:1};
@@ -119,6 +132,39 @@ check('本轮承接不会跨输入重放，60%继续按钮不复用历史承接'
  assert(!JSON.parse(nextAnswer.state)._und?.ack,'新回答须等待本轮理解，不能沿用旧ack');
 });
 (async()=>{
+ // 这些桩结果只验证短否定经过模型后的执行链，不将其当作模型语义判断已验证。
+ for(const sample of [
+  {label:'单问否定',question:'你平常会抽烟吗？',input:'不',status:'answered',facts:[{field:'Q7',sub:'smoke',subject:'自己',value:'不吸',evidence:'不'}]},
+  {label:'明确双项否定',question:cfg.tasks.Q7.core,input:'都不',status:'answered',facts:[{field:'Q7',sub:'smoke',subject:'自己',value:'不吸',evidence:'都不'},{field:'Q7',sub:'drink',subject:'自己',value:'不喝',evidence:'都不'}]},
+  {label:'明确只答吸烟',question:cfg.tasks.Q7.core,input:'不抽',status:'partial',facts:[{field:'Q7',sub:'smoke',subject:'自己',value:'不吸',evidence:'不抽'}],pending:true},
+  {label:'否定范围未确定',question:cfg.tasks.Q7.core,input:'不',status:'unclear',facts:[],pending:true},
+  {label:'拒答不同于否定',question:cfg.tasks.Q7.core,input:'不想说',status:'refused',facts:[],refused:true}
+ ]){
+  const st=api.newState(cfg);st.stage='S40';st.current={task:'Q7',qtype:'MAIN',text:sample.question};st.tasks.Q5.a=1;
+  const trace=[],calls=[];
+  const reply=await api.runTurn({cfg,prompts,p1:'B',stateJson:JSON.stringify(st),trace,llm:async(id,pid)=>{calls.push({id,pid});return JSON.stringify({answer_status:sample.status,facts:sample.facts,ack:'嗯，知道啦～'});}},sample.input);
+  const state=JSON.parse(reply.newState),written=JSON.parse(trace.find(t=>t.id==='N09').output.written);
+  assert.equal(calls.length,1);assert.equal(calls[0].pid,'P1B',sample.label+' 不能因回答简短而被前置规则拦截');
+  assert.deepEqual(written.map(f=>[f.field,f.sub,f.value,f.evidence]),sample.facts.map(f=>[f.field,f.sub,f.value,f.evidence]));
+  assert.equal(state._und.answer_status,sample.status);assert.equal(state.tasks.Q7.refused,sample.refused?1:0);
+  assert.equal(state.pending.some(p=>p.task==='Q7'),!!sample.pending,'不明确的缺项仍按原有隔题重问处理');
+  assert.equal(state.current.task,'Q6');assert(!trace.some(t=>['N14','N17'].includes(t.id)),'本轮不新增澄清模型调用');
+ }
+ passed++;console.log('✓ 桩结果回归：短否定交给P1B，单项/双项事实和未确定缺项按原规则处理');
+ {
+  const st=api.newState(cfg);st.stage='S40';st.current={task:'Q6',qtype:'FOLLOW_UP',text:'那有没有哪次实在喜欢，最后还是买下来的？'};
+  for(const id of ['Q5','Q7','Q6'])st.tasks[id].a=1;st.tasks.Q6.f=1;st.tasks.Q6.fu=1;st.used.S40.F=1;
+  st.facts=[{field:'Q6',sub:'condition',subject:'自己',value:'非必需的东西不买',evidence:'不买吧',active:true,status:'已确认',src:'Q6'}];
+  const trace=[],calls=[],ack='好，没有这样的例外～';
+  const result=await api.runTurn({cfg,prompts,p1:'B',stateJson:JSON.stringify(st),trace,llm:async(id,pid)=>{calls.push({id,pid});return JSON.stringify({answer_status:'answered',facts:[],ack});}},'没');
+  const state=JSON.parse(result.newState),written=JSON.parse(trace.find(t=>t.id==='N09').output.written);
+  assert.equal(calls.length,1);assert.equal(calls[0].pid,'P1B');assert(!trace.some(t=>['N14','N17'].includes(t.id)));
+  assert.equal(written.length,0);assert.equal(state._und.answer_status,'answered');assert.equal(state.tasks.Q6.refused,0);
+  assert.equal(state.tasks.Q6.h,1);assert.equal(state.tasks.Q6.done,1);assert.equal(state.current.task,'Q9');
+  assert(!state.pending.some(p=>p.task==='Q6'));assert.equal(state.used.S40.F,1,'本次回答不再占用追问额度');
+  assert(result.reply.startsWith(ack));assert(!/先放|跳过|没想好/.test(result.reply),'有效否定回答不能展示跳过话术');
+  passed++;console.log('✓ 购买经历追问答“没”的桩结果可无新事实，正常进入Q9且不增加追问或P3调用');
+ }
  const st=api.newState(cfg);st.stage='S40';st.current={task:'Q6',qtype:'FOLLOW_UP',text:'那要是预算够的时候，你会怎么判断值不值得买呀？'};
  st.tasks.Q5.a=1;st.tasks.Q7.a=1;st.tasks.Q6.a=1;st.tasks.Q6.f=1;
  st.dialog=[{q:'最早的问题标记 EARLIER_QUESTION',a:'最早回答标记 EARLIER_ANSWER'},{q:'最近两轮的第一问 RECENT_ONE',a:'完整长回答'+('生活安排'.repeat(65))+'LONG_ANSWER_END'},{q:'最近两轮的第二问 RECENT_TWO',a:'暂时不买，预算有限 LAST_ANSWER'}];
