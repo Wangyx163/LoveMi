@@ -146,7 +146,7 @@ function N02(cfg,stateJson,ui){
   const SR=cfg.stage_rules||{};const stageRules=curTask==='NEED'?SR.NEED:(inCard?SR.CARD:((cfg.tasks[curTask]||{}).kind==='supplement'?SR.SUP:SR.default));
   const slim=s=>{try{const o=JSON.parse(s);if(!o||!o.task_id)return s;const {known_facts,recent_dialog,avoid_texts,...rest}=o;return S(rest);}catch(e){return s;}};
   return {branch,state:S(st),cont_q:contQ,reply_static:reply,user_text:ui.slice(0,inputLimit(cfg,curTask)),forced_und:forcedUnd,stage_rules:stageRules||'',cur_task_slim:slim(S(curSpec)),next_hint_slim:slim(hint),tag_catalog:(cfg.tag_catalog_in_prompt&&curTask==='NEED')?Object.entries(cfg.tag_lib).map(([k,v])=>`${k}｜${v.text}｜${v.cat}`).join('\n'):'（未启用）',cur_q:cur.text||'',cur_task:S(curSpec),field_dict:fieldDictText(cfg),
-    facts_text:factsText(cfg,st),stage:st.stage,budget_left:String(budgetLeft(cfg,st,st.stage)),
+    facts_text:factsText(cfg,st),recent_dialog:S(st.dialog.slice(-2)),stage:st.stage,budget_left:String(budgetLeft(cfg,st,st.stage)),
     cards_text:inCard?cardsText(st):'（当前不在人物卡阶段）',next_hint:hint,q_task_spec:qSpec};
 }
 /* ---------- N38 ---------- */
@@ -204,7 +204,7 @@ function N11(cfg,stateStr,ui,hintStr){
   const st=JSON.parse(stateStr);let hint={};try{hint=JSON.parse(hintStr||'{}');}catch(e){}
   const und=st._und||{},stage=st.stage,cur=st.current,tid=cur.task,qtype=cur.qtype,T=st.tasks,lim=cfg.limits;let status=und.answer_status||'unclear';
   st.stat=st.stat||{};st.stat[status]=(st.stat[status]||0)+1;if(tid==='NEED')st.need_status=status;
-  st.dialog=[...st.dialog,{q:cur.text,a:String(ui).slice(0,200)}].slice(-8);
+  st.dialog=[...st.dialog,{q:cur.text,a:String(ui).slice(0,inputLimit(cfg,tid))}].slice(-8);
   const hold=(text,why)=>{st.plan={action:'HOLD',task:tid,qtype};return {state:S(st),action:'HOLD',route:'READY',candidate_q:text,q_task_spec:'',need_ack:false,ack_anchor:'',rel_facts_text:'',debug:`动作=HOLD（${why}）原题保留`};};
   if(status==='risk'){st._care=true;status='skipped';}   // 口头关怀一句，主流程照常推进
   if(und.parse_ok===false){if(!cur.fail){cur.fail=1;return hold(cfg.model_fail_reply+'\n\n'+cur.text,'模型失败');}status='unclear';}
@@ -288,7 +288,8 @@ function N15(cfg,llmOut,specStr,isFinal){const sp=parseLoose(specStr);
 /* ---------- N23 ---------- */
 // 口头关怀：只是一句温暖的承接，放在下一条回复最前面
 function careLine(cfg,st){if(!st._care)return '';st._care=false;const L=cfg.care_ack||[];return L.length?L[(st.turn||0)%L.length]:'';}
-function N23(cfg,stateStr,q){const st=JSON.parse(stateStr);q=String(q||'').trim();const und=st._und||{};
+const replyParagraph=text=>String(text||'').replace(/\s*[\r\n]+\s*/g,'').trim();
+function N23(cfg,stateStr,q){const st=JSON.parse(stateStr);q=replyParagraph(q);const und=st._und||{};
   // 承接（已并入 ⑤ 的输出）：轻量校验；敷衍且没有可回应的内容时，用固定的猫系模板
   let ack=String(und.ack||'').trim();if(ack.length>30||/[？?]/.test(ack)||cfg.blocked.compliance.some(w=>ack.includes(w)))ack='';
   const prevTask=(st.current||{}).task;
@@ -298,8 +299,8 @@ function N23(cfg,stateStr,q){const st=JSON.parse(stateStr);q=String(q||'').trim(
   const plan=st.plan||{},n=st.history.length+1;
   if(plan.action==='HOLD'){st._new=[];return {reply:q+`\n\n— 画像进度 ${Math.floor((st.progress||0)+0.5)}%`,new_state:S(st)};}
   st.current={task:plan.task,qtype:plan.qtype,text:q,qid:'q'+n};st.history.push({task:plan.task,qtype:plan.qtype,text:q});st._new=[];
-  if(plan.action==='REASK'){st.current.hold=plan.hold||1;q=(plan.prefix||'')+'\n\n'+q;}
-  let reply=ack?(ack+'\n\n'+q):q;reply+=`\n\n— 画像进度 ${Math.floor((st.progress||0)+0.5)}%`;
+  if(plan.action==='REASK'){st.current.hold=plan.hold||1;q=replyParagraph(plan.prefix)+q;}
+  let reply=replyParagraph(ack)+q;reply+=`\n\n— 画像进度 ${Math.floor((st.progress||0)+0.5)}%`;
   return {reply,new_state:S(st)};}
 /* ---------- N25 ---------- */
 const NEED={'情感慰藉':'被理解、被陪着','灵魂共鸣':'能聊到一起的共鸣','现实助力':'生活里彼此搭把手','感官吸引':'心动的感觉'};
@@ -441,7 +442,7 @@ function N36(cfg,stateStr){const st=JSON.parse(stateStr);const me=cfg.user_profi
   st.progress=progressOf(cfg,st);st._new=[];const care=careLine(cfg,st);if(care)body.unshift(care,'');
   return {reply:body.join('\n')+`\n\n— 画像进度 ${Math.floor(st.progress+0.5)}%`,new_state:S(st),mode};}
 
-const p1Vars=r2=>({user_input:r2.user_text,stage:r2.stage,budget_left:r2.budget_left,cur_q:r2.cur_q,cur_task:r2.cur_task,next_hint:r2.next_hint,cur_task_slim:r2.cur_task_slim,next_hint_slim:r2.next_hint_slim,stage_rules:r2.stage_rules,cards_text:r2.cards_text,field_dict:r2.field_dict,facts_text:r2.facts_text,tag_catalog:r2.tag_catalog});
+const p1Vars=r2=>({user_input:r2.user_text,stage:r2.stage,budget_left:r2.budget_left,cur_q:r2.cur_q,cur_task:r2.cur_task,next_hint:r2.next_hint,cur_task_slim:r2.cur_task_slim,next_hint_slim:r2.next_hint_slim,stage_rules:r2.stage_rules,cards_text:r2.cards_text,field_dict:r2.field_dict,facts_text:r2.facts_text,recent_dialog:r2.recent_dialog,tag_catalog:r2.tag_catalog});
 const renderUserPrompt=(prompts,pid,vars)=>prompts[pid].user.replace(/\{\{(\w+)\}\}/g,(m,k)=>vars[k]??'');
 const renderSys=(prompts,pid,vars)=>prompts[pid].sys.replace(/\{\{(\w+)\}\}/g,(m,k)=>vars[k]??'');
 /* ---------- 编排：按 Coze 连线执行一轮 ---------- */
