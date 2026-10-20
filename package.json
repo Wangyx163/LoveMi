@@ -7,8 +7,9 @@
     "node": ">=18"
   },
   "scripts": {
+    "sync": "node scripts/sync-runtime.js",
     "build": "node scripts/build-public.js",
     "start": "node server.js",
-    "test": "node tests/run_tests.js && node tests/test_routing_edges.js && node tests/test_local_gateway.js && node tests/test_vercel.js"
+    "test": "node scripts/sync-runtime.js --check && node tests/run_tests.js && node tests/test_routing_edges.js && node tests/test_fact_rendering.js && node tests/test_local_gateway.js && node tests/test_vercel.js"
   }
 }

@@ -29,7 +29,8 @@ function factsText(cfg,st,only,withEv){
   for(const f of activeFacts(st)){ if(only&&!only.includes(f.field))continue;
     const cond=f.condition?`（条件：${f.condition}）`:'';
     const hard=f.strength==='硬性'?'（硬性）':'';
-    rows.push(withEv?`- ${cfg.fields[f.field].name}｜对象:${f.subject}｜${f.value}${hard}${cond}｜原话:${f.evidence}`:`- ${f.field}.${f.sub}｜${cfg.fields[f.field].name}｜对象:${f.subject}｜${f.value}${cond}`);}
+    const detail=`${f.field}.${f.sub}｜${cfg.fields[f.field].name}｜对象:${f.subject}｜极性:${f.polarity||'肯定'}｜${f.value}${hard}${cond}`;
+    rows.push(`- ${detail}`+(withEv?`｜原话:${f.evidence}`:''));}
   if(!only&&!withEv){const ref=Object.keys(st.tasks).filter(t=>st.tasks[t].refused);if(ref.length)rows.push('- 已拒答的题目：'+ref.join('、'));}
   return rows.join('\n')||'（暂无）';
 }
@@ -148,7 +149,7 @@ function N02(cfg,stateJson,ui){
       if(t.kind==='main'&&!tmp.tasks[tid].a&&!covered(cfg,tmp,tid)&&tid!==curTask){hint=S(spec(cfg,st,tid,'MAIN'));break;}}}
   const inCard=curTask==='CARD_L1'||cur.qtype==='CARD_FOLLOWUP';
   const SR=cfg.stage_rules||{};const stageRules=curTask==='NEED'?SR.NEED:(inCard?SR.CARD:((cfg.tasks[curTask]||{}).kind==='supplement'?SR.SUP:SR.default));
-  const slim=s=>{try{const o=JSON.parse(s);if(!o||!o.task_id)return s;const {known_facts,recent_dialog,avoid_texts,...rest}=o;return S(rest);}catch(e){return s;}};
+  const slim=s=>{try{const o=JSON.parse(s);if(!o||!o.task_id)return s;const {known_facts,recent_dialog,avoid_texts,fallback,scenes,...rest}=o;return S(rest);}catch(e){return s;}};
   return {branch,state:S(st),cont_q:contQ,reply_static:reply,user_text:ui.slice(0,inputLimit(cfg,curTask)),forced_und:forcedUnd,stage_rules:stageRules||'',cur_task_slim:slim(S(curSpec)),next_hint_slim:slim(hint),tag_catalog:(cfg.tag_catalog_in_prompt&&curTask==='NEED')?Object.entries(cfg.tag_lib).map(([k,v])=>`${k}｜${v.text}｜${v.cat}`).join('\n'):'（未启用）',cur_q:cur.text||'',cur_task:S(curSpec),field_dict:fieldDictText(cfg),
     facts_text:factsText(cfg,st),recent_dialog:S(st.dialog.slice(-2)),stage:st.stage,budget_left:String(budgetLeft(cfg,st,st.stage)),
     cards_text:inCard?cardsText(st):'（当前不在人物卡阶段）',next_hint:hint,q_task_spec:qSpec};
@@ -350,8 +351,8 @@ function N25(cfg,stateStr,llmOut){const st=JSON.parse(stateStr);const out=parseL
   return {reply:parts.join('\n'),new_state:S(st),content_status:status};}
 /* ---------- N29 ---------- */
 function rowsOf(cfg,facts,notes,only){const out=[];for(const f of facts){if(!only.includes(f.field))continue;const nm=cfg.fields[f.field].name;
-  const cond=f.condition?`（条件：${f.condition}）`:'';const hard=f.strength==='硬性'?'（硬性）':'';out.push(`- ${nm}｜对象:${f.subject}｜${f.value}${hard}${cond}｜原话:${f.evidence}`);}
-  for(const n of notes){if(!only.includes(n.field))continue;out.push(`- ${cfg.fields[n.field].name}｜对象:${n.subject}｜（前后矛盾，需要综合判断）｜原话:${n.evidence}`+(n.note?`｜说明:${n.note}`:''));}
+  const cond=f.condition?`（条件：${f.condition}）`:'';const hard=f.strength==='硬性'?'（硬性）':'';out.push(`- ${f.field}.${f.sub}｜${nm}｜对象:${f.subject}｜极性:${f.polarity||'肯定'}｜${f.value}${hard}${cond}｜原话:${f.evidence}`);}
+  for(const n of notes){if(!only.includes(n.field))continue;out.push(`- ${n.field}.${n.sub}｜${cfg.fields[n.field].name}｜对象:${n.subject}｜（前后矛盾，需要综合判断）｜原话:${n.evidence}`+(n.note?`｜说明:${n.note}`:''));}
   return out.join('\n')||'（暂无）';}
 function N29(cfg,stateStr){const st=JSON.parse(stateStr);const facts=activeFacts(st),notes=(st.notes||[]).filter(n=>n.active);
   const c60=st.stage_card_60||{};

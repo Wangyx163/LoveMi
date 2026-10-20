@@ -1,0 +1,145 @@
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+const root = path.join(__dirname, '..');
+const cfg = JSON.parse(fs.readFileSync(path.join(root, 'data/config.json'), 'utf8'));
+const prompts = JSON.parse(fs.readFileSync(path.join(root, 'data/prompts.json'), 'utf8'));
+const api = vm.runInNewContext(
+  fs.readFileSync(path.join(root, 'src/engine.js'), 'utf8') +
+    '\n({newState,N09,N29,factsText,rowsOf,runTurn});',
+  {performance: require('node:perf_hooks').performance}
+);
+
+function fact(field, sub, subject, value, extra = {}) {
+  return {field, sub, subject, value, evidence: value, active: true, status: '已确认', ...extra};
+}
+
+function renderings(st, fields) {
+  return [
+    ['理解简版', api.factsText(cfg, st, fields, false), false],
+    ['阶段画像', api.factsText(cfg, st, fields, true), true],
+    ['完整画像', api.rowsOf(cfg, st.facts.filter(f => f.active), [], fields), true]
+  ];
+}
+
+function factLine(text, key) {
+  const lines = text.split(/\r?\n/).filter(line => line.includes(key));
+  assert.equal(lines.length, 1, `${key} 应能定位到唯一事实`);
+  return lines[0];
+}
+
+function assertPolarity(line, polarity) {
+  assert(new RegExp('极性\\s*[:：=]?\\s*' + polarity).test(line), `应明确保留极性：${polarity}`);
+}
+
+let passed = 0;
+async function check(name, fn) {
+  await fn();
+  passed++;
+  console.log('✓ ' + name);
+}
+
+(async () => {
+  await check('烟酒均回答“不介意”时，各画像仍能区分具体子项', () => {
+    const st = api.newState(cfg);
+    st.facts = [
+      fact('NEED', 'smoke', 'TA', '不介意'),
+      fact('NEED', 'drink', 'TA', '不介意')
+    ];
+    for (const [name, text] of renderings(st, ['NEED'])) {
+      const smoke = factLine(text, 'NEED.smoke');
+      const drink = factLine(text, 'NEED.drink');
+      assert.notEqual(smoke, drink, `${name} 不能把同值的不同问题渲染成相同事实`);
+      for (const line of [smoke, drink]) {
+        assert(line.includes('TA'));
+        assert(line.includes('不介意'));
+      }
+    }
+  });
+
+  await check('硬性要求和条件不会随事实渲染丢失', () => {
+    const st = api.newState(cfg);
+    st.facts = [fact('NEED', 'smoke', 'TA', '不吸烟', {
+      strength: '硬性', condition: '在一起生活时', evidence: '在一起生活时一定不能抽烟'
+    })];
+    for (const [name, text, withEvidence] of renderings(st, ['NEED'])) {
+      const line = factLine(text, 'NEED.smoke');
+      for (const part of ['TA', '不吸烟', '硬性', '在一起生活时']) {
+        assert(line.includes(part), `${name} 应保留 ${part}`);
+      }
+      if (withEvidence) assert(line.includes(st.facts[0].evidence), `${name} 应保留原话`);
+    }
+  });
+
+  await check('极性缺省为肯定，否定只作标记，不翻转原有“不吸”值', () => {
+    const st = api.newState(cfg);
+    st.facts = [
+      fact('NEED', 'drink', 'TA', '不介意'),
+      fact('Q7', 'smoke', '自己', '不吸', {polarity: '否定', evidence: '我不吸烟'})
+    ];
+    const before = JSON.stringify(st.facts);
+    for (const [name, text, withEvidence] of renderings(st, ['NEED', 'Q7'])) {
+      assertPolarity(factLine(text, 'NEED.drink'), '肯定');
+      const negative = factLine(text, 'Q7.smoke');
+      assertPolarity(negative, '否定');
+      assert(negative.includes('自己'));
+      assert(negative.includes('不吸'), `${name} 不应自行作双重否定改写`);
+      if (withEvidence) assert(negative.includes('我不吸烟'));
+    }
+    assert.equal(JSON.stringify(st.facts), before, '渲染不能改写已确认事实');
+  });
+
+  await check('开放字段明确改口后，下游只收到新确认的兴趣', () => {
+    const st = api.newState(cfg);
+    st.current = {task: 'LIFE', qtype: 'MAIN', text: cfg.tasks.LIFE.core};
+    st.facts = [fact('Q1', 'items', '自己', '跑步', {evidence: '我喜欢跑步'})];
+    const write = api.N09(cfg, JSON.stringify(st), '现在改成游泳', JSON.stringify({
+      answer_status: 'answered',
+      facts: [{field: 'Q1', sub: 'items', subject: '自己', value: '游泳', evidence: '现在改成游泳', op: 'correct'}]
+    }));
+    const next = JSON.parse(write.state);
+    assert.equal(JSON.parse(write.rejected).length, 0);
+    assert.equal(next.facts.find(f => f.value === '跑步').active, false);
+    assert.equal(next.facts.find(f => f.value === '游泳').active, true);
+    const profile = api.N29(cfg, write.state);
+    for (const text of [profile.life_facts, api.factsText(cfg, next, ['Q1'], true)]) {
+      assert(text.includes('游泳'));
+      assert(!text.includes('跑步'), '已失效的旧兴趣不能重新进入画像输入');
+    }
+  });
+
+  await check('实际画像分支把相同的带条件和极性的生活事实传给 P6 与 P7', async () => {
+    const st = api.newState(cfg);
+    st.stage = 'AWAIT_60';
+    st.facts = [fact('Q7', 'drink', '自己', '偶尔', {
+      polarity: '肯定', condition: '朋友聚会时', evidence: '朋友聚会时偶尔喝一点'
+    })];
+    const lifeFacts = api.N29(cfg, JSON.stringify(st)).life_facts;
+    const calls = [];
+    await api.runTurn({
+      cfg, prompts, stateJson: JSON.stringify(st), trace: [],
+      llm: async (id, pid, sys, user) => {
+        calls.push({pid, user});
+        return pid === 'P6'
+          ? JSON.stringify({core: '', expect_ta: '', love_style: ''})
+          : JSON.stringify({daily: ''});
+      }
+    }, cfg.buttons.p60[1]);
+    assert.deepEqual(calls.map(c => c.pid).sort(), ['P6', 'P7']);
+    for (const {pid, user} of calls) {
+      assert(user.includes(lifeFacts), `${pid} 应使用相同的生活事实渲染`);
+      const line = factLine(user, 'Q7.drink');
+      assertPolarity(line, '肯定');
+      assert(line.includes('朋友聚会时'));
+      assert(line.includes('朋友聚会时偶尔喝一点'));
+    }
+  });
+
+  console.log(`\n${passed} 项事实渲染回归通过`);
+})().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

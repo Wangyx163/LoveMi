@@ -31,6 +31,7 @@ function copyAssets(directory, relative = 'assets') {
   }
 }
 function buildPublic() {
+  require('./sync-runtime').syncRuntime();
   // The only recursive deletion target is this fixed, verified generated folder.
   if (OUTPUT !== path.join(ROOT, 'public') || path.dirname(OUTPUT) !== ROOT) throw new Error('Invalid build directory');
   if (fs.existsSync(OUTPUT) && fs.lstatSync(OUTPUT).isSymbolicLink()) throw new Error('Refusing to replace a public symlink');
