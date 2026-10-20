@@ -58,7 +58,7 @@ node server.js
 | P1/P1B/P3/P5 | 关闭 | 60 s |
 | P6/P7 | 开启 | 180 s |
 
-当前服务是阿里云百炼 `https://dashscope.aliyuncs.com/compatible-mode/v1`，全部节点使用 `deepseek-v4.1-flash`。网关发送 `enable_thinking=false/true`，P6/P7 的 `max_tokens=8192` 为思考与最终输出预留空间。按本次私有仓库部署要求，后端 `.env` 随项目提交；浏览器端无法读取密钥。
+当前服务是 `https://aibrain-large-model-engine-slow.hellobike.cn/tokenplan/v1`，完整聊天端点为 `/tokenplan/v1/chat/completions`，全部节点使用 `DeepSeek-V4.1-Flash-1017`。网关发送 `enable_thinking=false/true`，P6/P7 的 `max_tokens=8192` 为思考与最终输出预留空间。按本次私有仓库部署要求，后端 `.env` 随项目提交；浏览器端无法读取密钥。
 
 > 网页的“按生产超时执行”仍使用原流程的性能预算，云端调试请保持关闭。网关按上表超时控制实际请求。
 

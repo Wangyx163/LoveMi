@@ -6,6 +6,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const BASE=path.join(__dirname,'..');
+const modelConfig=JSON.parse(fs.readFileSync(path.join(BASE,'config/models.json'),'utf8'));
 let testPort;
 let lastRequest=null;
 const fake=http.createServer((req,res)=>{
@@ -74,13 +75,13 @@ async function availablePort(){
   const model=await request('/api/model',{
    method:'POST',headers:{'Content-Type':'application/json',Origin:'http://127.0.0.1:'+testPort},body:modelInput});
   const data=JSON.parse(model.text);assert.equal(model.status,200,model.text);assert(data.text.includes('安全感确实挺重要'));assert.equal(lastRequest.messages[1].content,'安全感');assert.equal(lastRequest.stream,false);
-  assert.equal(lastRequest.model,'deepseek-v4.1-flash');
+  assert.equal(lastRequest.model,modelConfig.nodes.P1B.model);
   assert.equal(lastRequest.enable_thinking,false);
   assert.equal(lastRequest.thinking,undefined);
   for(const pid of ['P1','P3','P5','P6','P7']) {
    const response=await request('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pid,sys:'test',user:'test'})});
    assert.equal(response.status,200);
-   assert.equal(lastRequest.model,'deepseek-v4.1-flash');
+   assert.equal(lastRequest.model,modelConfig.nodes[pid].model);
    assert.equal(lastRequest.enable_thinking,['P6','P7'].includes(pid));
   }
   // Emulate a deployment platform terminating HTTPS before forwarding to Node.
