@@ -9,7 +9,7 @@ const cfg = JSON.parse(fs.readFileSync(path.join(root, 'data/config.json'), 'utf
 const prompts = JSON.parse(fs.readFileSync(path.join(root, 'data/prompts.json'), 'utf8'));
 const api = vm.runInNewContext(
   fs.readFileSync(path.join(root, 'src/engine.js'), 'utf8') +
-    '\n({newState,N09,N29,factsText,rowsOf,runTurn});',
+    '\n({newState,N09,N29,N32,factsText,rowsOf,runTurn});',
   {performance: require('node:perf_hooks').performance}
 );
 
@@ -33,6 +33,30 @@ function factLine(text, key) {
 
 function assertPolarity(line, polarity) {
   assert(new RegExp('极性\\s*[:：=]?\\s*' + polarity).test(line), `应明确保留极性：${polarity}`);
+}
+
+const originalInsight = '你在关系里慢慢靠近，日子里也给自己留点安静。';
+const rewrittenInsight = '你更喜欢热闹，遇见喜欢的人就想主动靠近。';
+const modelRelationship = {
+  core: rewrittenInsight,
+  expect_ta: '你希望能和对方好好沟通。',
+  love_style: '你愿意有事一起商量。'
+};
+const modelLife = {daily: '你空闲时喜欢读书。'};
+
+function portraitState() {
+  const st = api.newState(cfg);
+  st.facts = [
+    fact('Q1', 'items', '自己', '读书'),
+    fact('Q8', 'expectation', '关系', '好好沟通'),
+    fact('Q9', 'strategy', '关系', '一起商量')
+  ];
+  return st;
+}
+
+function assemblePortrait(st) {
+  const result = api.N32(cfg, JSON.stringify(st), JSON.stringify(modelRelationship), JSON.stringify(modelLife));
+  return {result, profile: JSON.parse(result.new_state).profile};
 }
 
 let passed = 0;
@@ -138,7 +162,101 @@ async function check(name, fn) {
     }
   });
 
-  console.log(`\n${passed} 项事实渲染回归通过`);
+  await check('完整画像逐字沿用成功的 60% 洞察，P6 改写不会覆盖或误记为兜底', () => {
+    const st = portraitState();
+    st.stage_card_60 = {attitude: originalInsight, content_status: 'ok', fallback_group: ''};
+    const {result, profile} = assemblePortrait(st);
+    assert.equal(profile.core, originalInsight);
+    assert.notEqual(profile.core, rewrittenInsight);
+    assert.equal(profile.source.core, '60%');
+    assert.equal(profile.content_status, 'ok', '正常继承阶段洞察不应使完整画像降为兜底');
+    assert(!result.fallback_sections.includes('core'));
+    assert(result.reply.includes(originalInsight));
+    assert(!result.reply.includes(rewrittenInsight));
+  });
+
+  await check('60% 已展示的兜底文案同样原样沿用，并保留兜底来源', () => {
+    const st = portraitState();
+    const displayedFallback = '你的样子正在一点点清晰，剩下的，我们可以慢慢了解。';
+    st.stage_card_60 = {attitude: displayedFallback, content_status: 'fallback', fallback_group: 'default'};
+    const {result, profile} = assemblePortrait(st);
+    assert.equal(profile.core, displayedFallback);
+    assert.equal(profile.source.core, 'fallback');
+    assert.equal(profile.content_status, 'fallback');
+    assert(result.fallback_sections.includes('core'));
+  });
+
+  await check('画像输入仍只把成功的 P5 文案作为 p60_insight，兜底沿用由组装层负责', () => {
+    const st = portraitState();
+    st.stage_card_60 = {attitude: originalInsight, content_status: 'ok'};
+    assert.equal(api.N29(cfg, JSON.stringify(st)).p60_insight, originalInsight);
+    st.stage_card_60.content_status = 'fallback';
+    assert.equal(api.N29(cfg, JSON.stringify(st)).p60_insight, '无');
+    assert.equal(st.stage_card_60.attitude, originalInsight, '输入筛选不应删除已展示的文案');
+  });
+
+  await check('没有 60% 文案时忽略 P6 的 core，使用已有配置兜底', () => {
+    for (const withFacts of [true, false]) {
+      for (const card of [undefined, {attitude: '', content_status: 'ok'}]) {
+        const st = withFacts ? portraitState() : api.newState(cfg);
+        if (card) st.stage_card_60 = card;
+        const {result, profile} = assemblePortrait(st);
+        const configured = cfg.fallback_groups.default[withFacts ? 'core_some' : 'core'];
+        assert(configured.includes(profile.core), '应采用已有的中性或缺少信息兜底');
+        assert.notEqual(profile.core, rewrittenInsight, '无阶段文案也不能改用 P6 重写的 core');
+        assert.equal(profile.source.core, 'fallback');
+        assert.equal(profile.content_status, 'fallback');
+        assert(result.fallback_sections.includes('core'));
+      }
+    }
+  });
+
+  await check('两条真实画像链路保留阶段文案或已有兜底，且只调用 P6/P7', async () => {
+    for (const route of ['direct', 'completed']) {
+      for (const status of ['ok', 'fallback', 'missing']) {
+        const st = portraitState();
+        if (status !== 'missing') {
+          st.stage_card_60 = {
+            attitude: originalInsight, content_status: status,
+            fallback_group: status === 'fallback' ? 'default' : ''
+          };
+        }
+        let input;
+        if (route === 'direct') {
+          st.stage = 'AWAIT_60';
+          input = cfg.buttons.p60[1];
+        } else {
+          st.stage = 'S40';
+          for (const tid of [...cfg.order.S60, ...cfg.order.S40]) {
+            if (tid !== 'Q12') Object.assign(st.tasks[tid], {a: 1, done: 1});
+          }
+          st.current = {task: 'Q12', qtype: 'MAIN', text: cfg.tasks.Q12.core};
+          input = '没有其他补充';
+        }
+        const calls = [];
+        const result = await api.runTurn({
+          cfg, prompts, stateJson: JSON.stringify(st), trace: [],
+          llm: async (id, pid) => {
+            calls.push(pid);
+            return JSON.stringify(pid === 'P6' ? modelRelationship : modelLife);
+          }
+        }, input);
+        const profile = JSON.parse(result.newState).profile;
+        assert.deepEqual(calls.sort(), ['P6', 'P7'], `${route}/${status} 不应追加 P5 或其他模型调用`);
+        if (status === 'missing') {
+          assert(cfg.fallback_groups.default.core_some.includes(profile.core));
+        } else {
+          assert.equal(profile.core, originalInsight, `${route}/${status} 应逐字沿用已展示文案`);
+          assert(result.reply.includes(originalInsight));
+        }
+        assert.equal(profile.source.core, status === 'ok' ? '60%' : 'fallback');
+        assert.equal(profile.content_status, status === 'ok' ? 'ok' : 'fallback');
+        assert(!result.reply.includes(rewrittenInsight));
+      }
+    }
+  });
+
+  console.log(`\n${passed} 项事实渲染与阶段洞察回归通过`);
 })().catch(error => {
   console.error(error);
   process.exitCode = 1;

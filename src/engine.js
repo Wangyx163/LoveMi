@@ -369,18 +369,17 @@ function tpl(st,fields){const parts=[];for(const f of st.facts.filter(f=>f.activ
 function N32(cfg,stateStr,outRel,outLife){const st=JSON.parse(stateStr);const rel=parseLoose(outRel),life=parseLoose(outLife);
   const banned=[...cfg.blocked.compliance,...cfg.blocked.no_label];const ok=(t,mx)=>t&&t.length<=mx&&!banned.some(w=>t.includes(w));const info=hasInfo(st);
   const src={};const pick=(key,txt,mx,fields)=>{txt=String(txt||'').trim();if(ok(txt,mx)){src[key]='model';return txt;}const t=fields?tpl(st,fields):'';if(t){src[key]='template';return t.slice(0,mx);}src[key]='empty';return '';};
-  // 核心洞察：模型 → 60% 卡的洞察（非兜底时）→ 兜底文案（有信息用中性版，没信息按信号组）
-  let core=String(rel.core||'').trim();
-  if(ok(core,60))src.core='model';
-  else{const c60=st.stage_card_60||{};core=(c60.content_status==='ok'||(c60.attitude&&!c60.fallback_group))?c60.attitude:'';src.core=core?'60%':'fallback';
-    if(!core)core=info?fbText(cfg,st,'core_some'):fbText(cfg,st,'core');}
+  // 核心洞察沿用 60% 卡实际展示的原文，P6 不覆盖；阶段卡兜底也保持一致。
+  const c60=st.stage_card_60||{};let core=typeof c60.attitude==='string'&&c60.attitude.trim()?c60.attitude:'';
+  if(core)src.core=c60.content_status==='fallback'||c60.fallback_group?'fallback':'60%';
+  else{core=info?fbText(cfg,st,'core_some'):fbText(cfg,st,'core');src.core='fallback';}
   const expect=pick('expect_ta',rel.expect_ta,90,['NEED','Q8']),daily=pick('daily',life.daily,110,['Q1','Q2','Q3','Q5','Q6','Q7']),love=pick('love_style',rel.love_style,100,['Q4','Q9','Q10','Q11']);
   const tags=withFallbackTags(cfg,st,(st.tags||{})['100']||[]);const tagLine=tags.length?tags.map(t=>'#'+t.text).join('  '):'';
   const care=careLine(cfg,st);const lines=[...(care?[care,'']:[]),'【我的画像】','','核心洞察',core,''];
   if(!expect&&!daily&&!love){lines.push(fbText(cfg,st,'merged'),'');if(tagLine)lines.push(tagLine,'');}
   else{lines.push('我对 TA 的期待',expect||fbText(cfg,st,'expect'),'','兴趣日常',daily||fbText(cfg,st,'daily'));if(tagLine)lines.push(tagLine);lines.push('','我的相处方式',love||fbText(cfg,st,'love'),'');}
   lines.push(`「${cfg.buttons.p100[0]}」　「${cfg.buttons.p100[1]}」`);st.stage='PROFILE_READY';
-  const fb=Object.entries(src).filter(([k,v])=>v!=='model').map(([k])=>k);
+  const fb=Object.entries(src).filter(([k,v])=>v!=='model'&&v!=='60%').map(([k])=>k);
   st.profile={core,expect_ta:expect,daily,love_style:love,tags,source:src,fallback_group:fbGroup(st),content_status:fb.length?'fallback':'ok'};
   return {reply:lines.join('\n'),new_state:S(st),fallback_sections:fb};}
 
@@ -486,7 +485,7 @@ async function runTurn(ctx, ui){
     step('N26','输出：阶段消息','out',null,{text:cfg.profile_bubble});ctx.onBubble&&ctx.onBubble(cfg.profile_bubble);
     agg('N28','画像输入',{来源:direct?'N02':'N11'});
     const r29=code('N29','整理画像输入',()=>N29(cfg,stateStr),{});
-    const [o30,o31]=await Promise.all([model('N30','② 关系画像·100%（核心洞察 / 期待 / 相处）','P6',{rel_facts:r29.rel_facts,life_facts:r29.life_facts,p60_insight:r29.p60_insight}),model('N31','③ 生活画像·100%（兴趣日常）','P7',{life_facts:r29.life_facts})]);
+    const [o30,o31]=await Promise.all([model('N30','② 关系画像·100%（沿用核心 / 期待 / 相处）','P6',{rel_facts:r29.rel_facts,life_facts:r29.life_facts,p60_insight:r29.p60_insight}),model('N31','③ 生活画像·100%（兴趣日常）','P7',{life_facts:r29.life_facts})]);
     const r32=code('N32','组装 100% 画像',()=>N32(cfg,r29.state,o30,o31),{out_rel:o30,out_life:o31});
     finish('N32',r32.reply,r32.new_state);};
   if(r2.branch==='STATIC'){finish('N02',r2.reply_static,r2.state);}
@@ -509,7 +508,7 @@ async function runTurn(ctx, ui){
       sel('N12','下一步',r11.route);
       if(r11.route==='CARDS'){const r36=code('N36','召回 + 硬筛 + 排序 + 出卡',()=>N36(cfg,r11.state),{});finish('N36',r36.reply,r36.new_state);handled=true;}
       else if(r11.route==='SHOW_60'){step('N24a','输出：60% 阶段消息','out',null,{text:cfg.p60_bubble});ctx.onBubble&&ctx.onBubble(cfg.p60_bubble);
-        const o=await model('N24','② 60% 主文案（情感 + 生活态度）','P5',{rel_facts:r11.rel_facts_text,life_facts:r11.life_facts_text});
+        const o=await model('N24','② 60% 核心洞察','P5',{rel_facts:r11.rel_facts_text,life_facts:r11.life_facts_text});
         const r25=code('N25','组装 60% 阶段卡',()=>N25(cfg,r11.state,o),{llm_out:o});finish('N25',r25.reply,r25.new_state);handled=true;}
       else if(r11.route==='GENERATE_PROFILE'){await profile(r11.state,false);handled=true;}
       st=r11.state;qspec=r11.q_task_spec;cand=r11.candidate_q;

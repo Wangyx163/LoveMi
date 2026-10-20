@@ -30,6 +30,10 @@ function compileRuntime(){
   const end=html.indexOf('/* ===== 特殊场景测试用例',start);
   if(start<0||end<=start)throw Error('Missing embedded engine markers');
   html=html.slice(0,start)+read('src/engine.js').trimEnd()+'\n\n'+html.slice(end);
+  const casesStart=html.indexOf('/* ===== 特殊场景测试用例');
+  const casesEnd=html.indexOf('async function runCase(',casesStart);
+  if(casesStart<0||casesEnd<=casesStart)throw Error('Missing embedded test case markers');
+  html=html.slice(0,casesStart)+read('tests/cases.js').trimEnd()+'\n\n'+html.slice(casesEnd);
   html=replaceRequired(html,/^const DEFAULT_PROMPTS = .*;$/m,'const DEFAULT_PROMPTS = '+JSON.stringify(prompts)+';','prompt defaults');
   html=replaceRequired(html,/^const DEFAULT_CONFIG = .*;$/m,'const DEFAULT_CONFIG = '+JSON.stringify(cfg)+';','config defaults');
   // Migrate only the prompt set owned by these source templates. Existing stage
