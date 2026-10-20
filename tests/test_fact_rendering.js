@@ -9,7 +9,7 @@ const cfg = JSON.parse(fs.readFileSync(path.join(root, 'data/config.json'), 'utf
 const prompts = JSON.parse(fs.readFileSync(path.join(root, 'data/prompts.json'), 'utf8'));
 const api = vm.runInNewContext(
   fs.readFileSync(path.join(root, 'src/engine.js'), 'utf8') +
-    '\n({newState,N09,N29,N32,factsText,rowsOf,runTurn});',
+    '\n({newState,N09,N25,N29,N32,factsText,rowsOf,runTurn});',
   {performance: require('node:perf_hooks').performance}
 );
 
@@ -67,6 +67,18 @@ async function check(name, fn) {
 }
 
 (async () => {
+  await check('60% 模型与兜底文案均去掉句号，完整画像继承处理后的原文', () => {
+    for (const attitude of [originalInsight, originalInsight.replace('。', '.'), '']) {
+      const result = api.N25(cfg, JSON.stringify(portraitState()), JSON.stringify({attitude, insufficient: !attitude}));
+      const st = JSON.parse(result.new_state);
+      const displayed = st.stage_card_60.attitude;
+      assert(displayed && !/[。.]/.test(displayed));
+      if (attitude) assert.equal(displayed, originalInsight.replace('。', ''));
+      assert(result.reply.includes(displayed));
+      assert.equal(assemblePortrait(st).profile.core, displayed);
+    }
+  });
+
   await check('烟酒均回答“不介意”时，各画像仍能区分具体子项', () => {
     const st = api.newState(cfg);
     st.facts = [

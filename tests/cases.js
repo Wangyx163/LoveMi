@@ -128,7 +128,7 @@ const CASES=[
    c.ok(card.tags.some(t=>t.cat==='社交情感')&&card.tags.some(t=>t.cat==='兴趣生活'),'情感 + 生活态度都有'),c.ok(c.ran(5,'N24a'),'60% 前先发阶段消息')];}},
 {cat:'60% 标签卡',off:0,name:'100% 核心洞察原样沿用 60% 的 P5 文案',desc:'60% 主文案交给 P6 参考，最终 core 始终由组装层复用原文',
  steps:[...TO60,['生成画像，去首页看看',{N30:{core:'你想要有话好好说的关系，也愿意把周末交给山野。',expect_ta:'希望对方有事能好好说开。',love_style:'你遇事愿意先沟通。'},N31:{daily:'你周末爱爬山，作息偏早。'}}]],
- check:c=>[c.eq(c.modelInput(6,'N30').p60_insight,'你希望两个人有事能好好说开，周末也爱去爬山透透气。','60% 洞察原样传入'),c.eq(c.st.profile.core,c.st.stage_card_60.attitude,'P6返回不同core时仍沿用P5原文'),c.ok(!c.st.profile.core.includes('把周末交给山野'),'不采用P6改写')]},
+ check:c=>[c.eq(c.modelInput(6,'N30').p60_insight,'你希望两个人有事能好好说开，周末也爱去爬山透透气','60% 洞察去句号后原样传入'),c.eq(c.st.profile.core,c.st.stage_card_60.attitude,'P6返回不同core时仍沿用P5原文'),c.ok(!c.st.profile.core.includes('把周末交给山野'),'不采用P6改写')]},
 
 {cat:'节奏下限（补充问题）',off:0,name:'前 60% 只答了 4 题：先插一道补充问题',desc:'需求、人物卡（没有追问）、兴趣、恋爱都答完只有 4 题，额度还有：先问补充问题，再出 60% 卡；补充问题不涨进度，只占额度',
  steps:[['开始',{}],['看感觉吧',{N04:U('nothing_to_add')}],['B，看着很温柔',{N04:U('answered',[['CARD','l1','候选反馈','B','B'],['CARD','l2','候选反馈','温柔','看着很温柔']],{card_level:'L2'})}],

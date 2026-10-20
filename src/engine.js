@@ -340,10 +340,12 @@ function p60Template(st){const f=activeFacts(st),get=(fid,sub,subj)=>f.find(x=>x
   if(need)rel=`在关系里你更看重${NEED[need.value]||need.value}`;else if(pace&&['非常慢热','偏慢热'].includes(pace.value))rel='你在感情里偏慢热，愿意让关系慢慢升温';else if(exp)rel=`你希望两个人${String(exp.value).replace(/^希望/,'')}`;
   const it=get('Q1','items'),sl=get('Q2','sleep');let life='';if(it)life=`日子里也爱${it.value}`;else if(sl)life={'偏晚睡':'日子里是个夜猫子','偏早睡':'日子里作息偏早'}[sl.value]||'';
   return rel&&life?`${rel}，${life}。`:(rel?rel+'。':(life?'你'+life.replace(/^日子里/,'平时')+'。':''));}
+function stageInsightText(text){return String(text||'').replace(/。|\.(?=\s|$)/g,'').trim();}
 function N25(cfg,stateStr,llmOut){const st=JSON.parse(stateStr);const out=parseLoose(llmOut);let line=String(out.attitude||'').trim(),status='ok';
   const R=cfg.p60_card;
   if(line.length<R.insight_min||line.length>R.insight_max||[...cfg.blocked.compliance,...cfg.blocked.no_label].some(w=>line.includes(w))||out.insufficient){status='fallback';
     line=p60Template(st);if(!line)line=hasInfo(st)?fbText(cfg,st,'core_some'):fbText(cfg,st,'p60');}
+  line=stageInsightText(line);
   const tags=pick60Tags(cfg,st);const care=careLine(cfg,st);const parts=care?[care,'','【LoveMi 眼中的你】']:['【LoveMi 眼中的你】'];if(line)parts.push(line);
   if(tags.length)parts.push(tags.map(t=>'#'+t.text).join('  '));
   parts.push('',`「${cfg.buttons.p60[0]}」　「${cfg.buttons.p60[1]}」`,'— 画像进度 60%');
