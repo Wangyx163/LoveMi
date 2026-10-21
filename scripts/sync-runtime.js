@@ -34,8 +34,28 @@ function compileRuntime(){
   const casesEnd=html.indexOf('async function runCase(',casesStart);
   if(casesStart<0||casesEnd<=casesStart)throw Error('Missing embedded test case markers');
   html=html.slice(0,casesStart)+read('tests/cases.js').trimEnd()+'\n\n'+html.slice(casesEnd);
+  const runnerStart=html.indexOf('async function runCase(',casesStart);
+  const runnerEnd=html.indexOf('const DEFAULT_CONFIG =',runnerStart);
+  if(runnerStart<0||runnerEnd<=runnerStart)throw Error('Missing embedded test runner markers');
+  html=html.slice(0,runnerStart)+read('tests/runner.js').trimEnd()+'\n\n'+html.slice(runnerEnd);
   html=replaceRequired(html,/^const DEFAULT_PROMPTS = .*;$/m,'const DEFAULT_PROMPTS = '+JSON.stringify(prompts)+';','prompt defaults');
   html=replaceRequired(html,/^const DEFAULT_CONFIG = .*;$/m,'const DEFAULT_CONFIG = '+JSON.stringify(cfg)+';','config defaults');
+  const intakeRevision='intake-'+crypto.createHash('sha256').update(JSON.stringify([cfg.need_intake,cfg.fields.NEED.subs.lifestyle,cfg.tasks.CARD_L1.goal,cfg.stage_rules.NEED,cfg.stage_rules.CARD])).digest('hex').slice(0,12);
+  const intakeCacheBlock=`/* ===== NEED intake config cache ===== */
+const NEED_INTAKE_REVISION='${intakeRevision}';
+if(LS.get('lm_need_intake_revision')!==NEED_INTAKE_REVISION){
+  cfg.need_intake=clone(DEFAULT_CONFIG.need_intake);
+  cfg.fields.NEED.subs.lifestyle=clone(DEFAULT_CONFIG.fields.NEED.subs.lifestyle);
+  cfg.tasks.NEED.min_info=clone(DEFAULT_CONFIG.tasks.NEED.min_info);
+  cfg.tasks.CARD_L1.goal=DEFAULT_CONFIG.tasks.CARD_L1.goal;
+  for(const key of ['NEED','CARD'])cfg.stage_rules[key]=DEFAULT_CONFIG.stage_rules[key];
+  LS.set('lm_cfg_v10',JSON.stringify(cfg));
+  LS.set('lm_need_intake_revision',NEED_INTAKE_REVISION);
+}
+/* ===== End NEED intake config cache ===== */`;
+  const intakeCached=/\/\* ===== NEED intake config cache ===== \*\/[\s\S]*?\/\* ===== End NEED intake config cache ===== \*\//;
+  if(intakeCached.test(html))html=html.replace(intakeCached,()=>intakeCacheBlock);
+  else html=replaceRequired(html,/^let cfg=.*$/m,html.match(/^let cfg=.*$/m)?.[0]+'\n'+intakeCacheBlock,'intake config cache insertion');
   // Migrate only the prompt set owned by these source templates. Existing stage
   // rules, question configuration, the legacy P1 and other local edits persist.
   const revision='shared-'+crypto.createHash('sha256').update(JSON.stringify(PIDS.map(pid=>prompts[pid]))).digest('hex').slice(0,12);

@@ -1,4 +1,6 @@
 async function runCase(cs,cfg,prompts,runTurn){
+  // 历史用例固定原有开场入口；默认开启的新门槛由 test_need_intake.js 独立验证。
+  if(cs.legacy_intake)cfg={...cfg,need_intake:{...cfg.need_intake,enabled:false}};
   let stateJson='';const replies=[],traces=[],states=[];
   // 开场多了一轮“准备好了吗”：在每个“开始 / 重新开始”后面自动补一句“好的”，用例里的轮次编号保持不变
   const steps=[],idx=[];cs.steps.forEach(s=>{idx.push(steps.length);steps.push(s);if(!cs.noReady&&(s[0]==='开始'||s[0]==='重新开始'))steps.push(['好的',{}]);});

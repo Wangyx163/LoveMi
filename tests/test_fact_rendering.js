@@ -223,7 +223,7 @@ async function check(name, fn) {
     }
   });
 
-  await check('两条真实画像链路保留阶段文案或已有兜底，且只调用 P6/P7', async () => {
+  await check('两条画像链路保留阶段文案，完成链路先理解 Q12，再调用 P6/P7', async () => {
     for (const route of ['direct', 'completed']) {
       for (const status of ['ok', 'fallback', 'missing']) {
         const st = portraitState();
@@ -247,14 +247,15 @@ async function check(name, fn) {
         }
         const calls = [];
         const result = await api.runTurn({
-          cfg, prompts, stateJson: JSON.stringify(st), trace: [],
+          cfg, prompts, p1: 'B', stateJson: JSON.stringify(st), trace: [],
           llm: async (id, pid) => {
             calls.push(pid);
+            if (pid === 'P1B') return JSON.stringify({answer_status:'nothing_to_add',ack:'好，那我整理一下～'});
             return JSON.stringify(pid === 'P6' ? modelRelationship : modelLife);
           }
         }, input);
         const profile = JSON.parse(result.newState).profile;
-        assert.deepEqual(calls.sort(), ['P6', 'P7'], `${route}/${status} 不应追加 P5 或其他模型调用`);
+        assert.deepEqual(calls.sort(), route === 'direct' ? ['P6', 'P7'] : ['P1B', 'P6', 'P7'], `${route}/${status} 仅调用所需理解与画像模型`);
         if (status === 'missing') {
           assert(cfg.fallback_groups.default.core_some.includes(profile.core));
         } else {

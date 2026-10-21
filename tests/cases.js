@@ -348,9 +348,9 @@ const CASES=[
 {cat:'追问算法',name:'前 60% 普通题追问也拆分权重',desc:'按公式 w×(a+h)/(1+f)：兴趣题确定追问后先结算一半，追问处理完再结算另一半',
  steps:[...OPEN,['B',{N04:U('answered',[['CARD','l1','候选反馈','B','B']]),N14:q('LIFE')}],['爬山',{N04:U('answered',[['Q1','items','自己','爬山','爬山']],{followup:{worth:true,question:'一般去哪儿爬呀？'}})}],['周边的山',{N04:U('answered'),N14:q('RHYTHM')}]],
  check:c=>[c.eq(c.prog(1),P7(4),'需求 + 第一感觉 + 两个判断节点'),c.eq(c.prog(2),45,'兴趣题追问未结束：结算一半'),c.eq(c.prog(3),P7(5),'追问处理完：结算另一半'),c.eq(c.st.used.S60.F,1,'追问计入额度')]},
-{cat:'追问算法',name:'最后一题只采集、不处理',desc:'Q12 的原话直接入库，不调理解模型，马上生成画像；进度 100%',
- steps:[...TO40,...S40_REST('Q5').slice(0,5),['希望对方爱干净',{}]],
- check:c=>[c.ok(!c.ran(11,'N04'),'没有调用理解模型'),c.eq(c.active('Q12.supplement'),'希望对方爱干净','原话入库'),c.eq(c.st.stage,'PROFILE_READY','直接生成画像'),c.eq(c.prog(11),100,'进度 100%')]},
+{cat:'追问算法',name:'最后一题理解补充后生成画像',desc:'Q12 经过回答理解与事实校验，普通明确补充保留原话；进度 100%',
+ steps:[...TO40,...S40_REST('Q5').slice(0,5),['希望对方爱干净',{N04:U('answered')}]],
+ check:c=>[c.ok(c.ran(11,'N04'),'调用理解模型识别本轮意图'),c.eq(c.active('Q12.supplement'),'希望对方爱干净','明确补充保留原话'),c.eq(c.st.stage,'PROFILE_READY','生成画像'),c.eq(c.prog(11),100,'进度 100%')]},
 {cat:'模型输出异常',name:'② 60% 文案里出现人格诊断',desc:'不合规时用事实模板兜底',
  steps:[...TO60.slice(0,5),['我慢热，有事好好说',{N04:U('answered',[['Q4','pace','自己','偏慢热','我慢热'],['Q8','expectation','关系','有事好好沟通','有事好好说']]),N24:{attitude:'你是回避型依恋人格。'}}]],
  check:c=>[c.has(c.reply(4),'偏慢热','用事实模板'),c.ok(!c.reply(4).includes('依恋'),'不出现诊断词')]},
@@ -386,5 +386,5 @@ const CASES=[
 {cat:'额度与进度',name:'后 40% 追问拆分进度',desc:'Q6 确定追问：主问后 +5%，追问后再 +5%',
  steps:[...TO40,...S40_REST('Q5').slice(0,2),['先看预算',{N04:U('answered',[['Q6','condition','自己','先看预算','先看预算']],{followup:{worth:true,question:'那什么情况下你会愿意超预算呢？'}})}],['特别喜欢的时候',{N04:U('answered'),N14:q('Q9')}]],
  check:c=>[c.eq(c.prog(7),70,'Q5+Q7 后 70%'),c.eq(c.prog(8),75,'Q6 主问后 75%'),c.eq(c.prog(9),80,'Q6 追问后 80%')]},
-];
+].map(cs=>({...cs,legacy_intake:true}));
 if(typeof module!=='undefined')module.exports={CASES};
