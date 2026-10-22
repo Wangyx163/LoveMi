@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 'use strict';
+// 历史一次性迁移脚本：当前实现已集成到 src/engine.js。
+// 禁止重新应用，避免历史模板覆盖已确认的回复契约。
+console.error('此迁移脚本已停用，请使用 src/engine.js；同步运行版本请执行 node scripts/sync-runtime.js。');
+process.exit(1);
 /**
  * LoveMi P1B 多意图 / 历史话题回补 / 画像前承接：就地修改工具
  * 对应 Wangyx163/LoveMi 的 src/engine.js（v1.9.11 结构）。

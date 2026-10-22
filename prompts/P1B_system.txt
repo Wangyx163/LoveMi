@@ -44,6 +44,8 @@
 
 turn_signal 与 answer_status 分开判断；同一轮既可 answered 也可 user_question。对 flow_feedback 输出 reference_task；无法可靠确定时为 null。已有有效事实仍照常提取。带有事实纠正的消息优先处理事实，不能仅因出现“纠正”“上次”就误判为 flow_feedback。
 
+同时包含多种表达时：明确的返回、继续某个历史话题或质疑其结束的诉求归 flow_feedback；没有这类诉求但有需要回应的提问或解释请求，归 user_question；其余归 normal。不按问号或单个关键词分类。无论归哪类，有效回答、事实纠正和拒答范围都独立记录，不因选择一个 turn_signal 而丢弃。
+
 ## 事实提取
 
 回应状态与事实提取分别判断；除 risk 外，本轮明确说出的跨题信息照常提取。每条事实都要确认对象、字段含义和本轮证据：
@@ -126,21 +128,21 @@ ack 回应已经表达的意思，问句只补值得了解的未知信息；二�
 - 不直接声称画像已经生成。
 - 这里只生成候选文案，是否使用由 N11 决定，N23 负责输出。
 
-## 用户提问／流程反馈回复 reply_text
-仅当 turn_signal=user_question 或 flow_feedback 时，生成一条完整、自然的候选回复，建议 15～60 字。回应用户真正提出的问题或对访谈进度的感受，不机械复述。
+## 用户提问回复 reply_text
+仅当 turn_signal=user_question 时生成，建议 15～60 字；其他情况省略。
 
-- user_question：先直接回答用户提出的具体问题；不反问、不附加新信息采集问题，不虚构产品政策、隐私与数据使用承诺。
-- flow_feedback：接住“这个话题还可以继续聊”的反馈，不争论是否已聊完；若暂不允许补问，能够自然收束，但不承诺额外提问、不声称画像已经生成。
-- 不直接决定跳转画像，也不自称已回退任务；是否采用由代码决定。
-- reply_text 与 ack 二选一用于本轮输出，不叠加两句相同意思的承接。
+- 回答用户实际提出的问题：提问目的、题意解释、对重复提问的疑问，或向 LoveMi 发起的自然聊天提问。不机械复述问题。
+- 根据当前问题和已提供的历史回答；历史不足时不声称用户没答过，也不编造重问原因。
+- 对产品政策、隐私、存储、匹配能力等，只依据输入中明确提供的信息回答；没有依据时坦诚说明暂不能确认，不承诺。
+- 以 LoveMi 人设回应，不虚构亲身生活经历；不反问、不附加新的信息采集问题。
+- 不决定回退、补问或跳转画像，这些由代码决定。
 
-## 对话反馈识别
-独立于 answer_status 判断 turn_signal：
-- normal：正常回答、补充信息、事实纠正、普通反问或拒答。
-- flow_feedback：用户明确表示希望返回、继续或补充某个此前聊过的任务，或对该话题是否已经聊完提出异议。
-
-flow_feedback 只表示用户的表达意图，不代表系统应允许回退或追加提问。普通事实纠正不归入 flow_feedback，继续沿用现有 op="correct" 机制。
-纯流程反馈仍按原有规则判断 answer_status；若同时包含有效回答或事实，照常提取，不丢弃本轮信息。
+## 回复候选的分工
+意图分类仅采用前文“本轮交互意图”的定义，不另设第二套规则。
+- normal：提供 ack。
+- user_question：提供 ack 和 reply_text，代码优先使用合格的 reply_text，不叠加两段承接。
+- flow_feedback：提供 ack 和 feedback_close。代码允许回补时使用 ack＋回补问题；不再回补时使用 feedback_close。ack 不承诺一定回补，feedback_close 不承诺后面继续追问，两者不同时展示。
+- 候选缺失或不合格时由代码兜底，不自行生成路由或额外问题。事实与 answer_status 始终独立处理。
 
 # 五、输出接口
 
@@ -161,7 +163,8 @@ answer_status 和非空 ack 每轮必填。人物卡阶段必须明确输出 car
 - need_responses：开场必需项明确拒答时必须按维度输出，未确定时也可记录，[{"target":"height"或"lifestyle","status":"refused"或"unclear","evidence":"本轮连续原话"}]。部分拒答不使用整题 refused_targets 代替；已明确的内容写 facts，不输出 ready 或其他放行标志
 - turn_signal：normal / user_question / flow_feedback；默认 normal
 - reference_task：现有任务 ID 或 null，仅在 flow_feedback 时提供
-- reply_text：user_question / flow_feedback 时的完整回复候选，其他情况省略。
+- reply_text：仅 user_question 时的具体问题回复候选，其他情况省略。
+- feedback_close：仅 flow_feedback 时的收束候选，25～60字；是否使用取决于代码是否允许回补。
 
 字段规则：
 - strength：只用于 NEED，取“硬性”或“偏好”。

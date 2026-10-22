@@ -13,11 +13,12 @@ const replaceRequired=(text,pattern,replacement,label)=>{
   return text.replace(pattern,()=>replacement);
 };
 
-function compileRuntime(){
+function compileRuntime({pids=PIDS}={}){
+  if(!Array.isArray(pids)||!pids.length||pids.some(pid=>!PIDS.includes(pid)))throw Error('Invalid prompt selection');
   const shared=read('prompts/shared_behavior.txt').trimEnd();
   if(!shared||shared.includes('{{'))throw Error('Shared behavior must be static text');
   const prompts=JSON.parse(read('data/prompts.json'));
-  for(const pid of PIDS){
+  for(const pid of pids){
     const template=read('prompts/'+pid+'_system.txt').trimEnd();
     if((template.match(/\{\{shared_behavior\}\}/g)||[]).length!==1)throw Error(pid+' must reference shared behavior once');
     prompts[pid].sys=template.replace('{{shared_behavior}}',shared);
@@ -73,8 +74,8 @@ if(LS.get('lm_shared_behavior_revision')!==SHARED_BEHAVIOR_REVISION){
   return {prompts,html,htmlFile,revision};
 }
 
-function syncRuntime({check=false}={}){
-  const result=compileRuntime();
+function syncRuntime({check=false,pids=PIDS}={}){
+  const result=compileRuntime({pids});
   const json=JSON.stringify(result.prompts,null,2)+'\n';
   const currentPrompts=read('data/prompts.json');
   const currentHtml=read(result.htmlFile);
@@ -84,11 +85,11 @@ function syncRuntime({check=false}={}){
     fs.writeFileSync(path.join(ROOT,'data/prompts.json'),json);
     fs.writeFileSync(path.join(ROOT,result.htmlFile),result.html);
   }
-  return {check,revision:result.revision,prompts:PIDS};
+  return {check,revision:result.revision,prompts:pids};
 }
 
 if(require.main===module){
-  try{console.log(JSON.stringify(syncRuntime({check:process.argv.includes('--check')})));}
+  try{const only=process.argv.find(arg=>arg.startsWith('--only='));console.log(JSON.stringify(syncRuntime({check:process.argv.includes('--check'),...(only?{pids:only.slice(7).split(',')}:{})})));}
   catch(error){console.error(error.message);process.exitCode=1;}
 }
 module.exports={compileRuntime,syncRuntime};

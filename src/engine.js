@@ -874,29 +874,6 @@ function N09(cfg, stateStr, ui, undTxt) {
       });
   }
   // 模型未提取最后一题时，保留明确的开放补充；反问、拒答和被拒事实不兜底。
-  if (
-    st.current?.task === "Q12" &&
-    (!und.turn_signal || und.turn_signal === "normal") &&
-    und.answer_status === "answered" &&
-    !written.some((f) => f.field === "Q12") &&
-    !(und.facts || []).some((f) => f.field === "Q12") &&
-    !prefilter(cfg, ui, "Q12") &&
-    !PII.test(ui) &&
-    !cfg.blocked.compliance.some((w) => ui.includes(w)) &&
-    !/^(?:没(?:有|什么)?(?:其他|别的|更多|补充)?|没什么(?:其他|别的)?(?:要|想)?补充的?|没有(?:其他|别的)?(?:要|想)?补充的?|暂时没有|不用了)[了啦呀吧哦～~。！!\s]*$/.test(String(ui).trim())
-  ) {
-    const raw = String(ui).trim().slice(0, inputLimit(cfg, "Q12"));
-    if (raw) {
-      st.fv += 1;
-      const rec = {
-        field: "Q12", sub: "supplement", subject: "自己", value: raw,
-        evidence: raw, src: "Q12", status: "已确认", active: true,
-        turn: st.turn, ver: st.fv, raw: true,
-      };
-      st.facts.push(rec);
-      written.push(rec);
-    }
-  }
   const a = statusOk.includes(und.answer_status)
     ? und.answer_status
     : "unclear";
@@ -926,9 +903,12 @@ function N09(cfg, stateStr, ui, undTxt) {
           .replace(/[\r\n]+/g, " ")
           .trim()
       : "",
-    feedback_close: und.turn_signal === "flow_feedback"
-      ? String(und.feedback_close || "").replace(/[\r\n]+/g, " ").trim()
-      : "",
+    feedback_close:
+      und.turn_signal === "flow_feedback"
+        ? String(und.feedback_close || "")
+            .replace(/[\r\n]+/g, " ")
+            .trim()
+        : "",
   };
   if (cfg.need_intake?.enabled) {
     const intake = needIntake(st);
@@ -1096,7 +1076,7 @@ function N11(cfg, stateStr, ui, hintStr) {
     }
     status = "unclear";
   }
-  if (status === 'asks_back' && !suppressExtra) {
+  if (status === "asks_back" && !suppressExtra) {
     if (!cur.hold) {
       const prefix = cfg.asks_back_template.replace(
         "{about}",
@@ -1156,12 +1136,19 @@ function N11(cfg, stateStr, ui, hintStr) {
     task = target && cfg.tasks[target],
     targetState = target && T[target];
   const canBackfill = !!(
-    task && targetState && target !== tid && target !== "CARD_L1" &&
-    task.stage === stage && task.kind === "main" && targetState.a === 1 &&
+    task &&
+    targetState &&
+    target !== tid &&
+    target !== "CARD_L1" &&
+    task.stage === stage &&
+    task.kind === "main" &&
+    targetState.a === 1 &&
     st.history.some((h) => h.task === target) &&
-    !targetState.covered && !targetState.refused &&
+    !targetState.covered &&
+    !targetState.refused &&
     !(cfg.no_replace_tasks || []).includes(target) &&
-    targetState.rep < lim.replace_per_task && budgetLeft(cfg, st, stage) > 0
+    targetState.rep < lim.replace_per_task &&
+    budgetLeft(cfg, st, stage) > 0
   );
   // 纯反馈回补后，未回答的当前主问题仍由题序找回；混合回答则正常结算。
   const deferCurrent = canBackfill && status === "skipped";
@@ -1171,7 +1158,8 @@ function N11(cfg, stateStr, ui, hintStr) {
     T[tid].a = 1;
     st.pending = st.pending.filter((x) => x.task !== tid);
     if (
-      !suppressExtra && !(cfg.no_replace_tasks || []).includes(tid) &&
+      !suppressExtra &&
+      !(cfg.no_replace_tasks || []).includes(tid) &&
       !T[tid].covered &&
       !T[tid].refused &&
       T[tid].rep < lim.replace_per_task &&
@@ -1190,8 +1178,13 @@ function N11(cfg, stateStr, ui, hintStr) {
     st.plan = { action: "FEEDBACK_ASK", task: target, qtype: "REPLACE" };
     st.progress = progressOf(cfg, st);
     return {
-      state: S(st), action: "FEEDBACK_ASK", route: "QGEN", candidate_q: "",
-      q_task_spec: S(leadSpec(cfg, st, target)), rel_facts_text: "", life_facts_text: "",
+      state: S(st),
+      action: "FEEDBACK_ASK",
+      route: "QGEN",
+      candidate_q: "",
+      q_task_spec: S(leadSpec(cfg, st, target)),
+      rel_facts_text: "",
+      life_facts_text: "",
       debug: `反馈回补 ${target}，消耗 R=1`,
     };
   }
@@ -1231,7 +1224,8 @@ function N11(cfg, stateStr, ui, hintStr) {
     for (const j of ["CARD_F1", "CARD_F2"]) {
       if (T[j].done) continue;
       const can =
-        !suppressExtra && cf.needed &&
+        !suppressExtra &&
+        cf.needed &&
         !l3 &&
         !dup &&
         st.card_fu < lim.card_followup &&
@@ -1253,7 +1247,8 @@ function N11(cfg, stateStr, ui, hintStr) {
   } else if (qtype === "MAIN") {
     const fu = und.followup || {};
     if (
-      !suppressExtra && !(cfg.no_followup_tasks || []).includes(tid) &&
+      !suppressExtra &&
+      !(cfg.no_followup_tasks || []).includes(tid) &&
       T[tid].covered &&
       !T[tid].refused &&
       ["answered", "partial"].includes(status) &&
@@ -1307,7 +1302,8 @@ function N11(cfg, stateStr, ui, hintStr) {
       PC.trigger === "end"
         ? !nxt
         : PC.trigger && PC.trigger === "before:" + nxt;
-    const sup = !suppressExtra && atTrigger ? pickSupplement(cfg, st, stage): null;
+    const sup =
+      !suppressExtra && atTrigger ? pickSupplement(cfg, st, stage) : null;
     if (sup) {
       action = "SUPPLEMENT";
       pTask = sup;
@@ -1481,12 +1477,20 @@ function buildTurnReply(cfg, st) {
   const und = st._und || {};
   if (und.parse_ok === false) return selected;
   if (["user_question", "flow_feedback"].includes(und.turn_signal)) {
-    const candidates = [und.reply_text];
-    if (und.turn_signal === "flow_feedback") candidates.push(und.feedback_close);
+    const candidates =
+      und.turn_signal === "flow_feedback"
+        ? [und.feedback_close]
+        : [und.reply_text];
     for (const candidate of candidates) {
-      const text = String(candidate || "").replace(/[\r\n]+/g, " ").trim();
-      if (text && [...text].length <= 120 && !/[？?]/.test(text) &&
-          !cfg.blocked.compliance.some((w) => text.includes(w))) {
+      const text = String(candidate || "")
+        .replace(/[\r\n]+/g, " ")
+        .trim();
+      if (
+        text &&
+        [...text].length <= 120 &&
+        !/[？?]/.test(text) &&
+        !cfg.blocked.compliance.some((w) => text.includes(w))
+      ) {
         return { text, care: false };
       }
     }
@@ -2359,7 +2363,8 @@ async function runTurn(ctx, ui) {
     newState = s;
   };
   const prepareStageReply = (stateStr) => {
-    const st = JSON.parse(stateStr), selected = buildTurnReply(cfg, st);
+    const st = JSON.parse(stateStr),
+      selected = buildTurnReply(cfg, st);
     if (selected.text) {
       step("N23a", "输出：本轮承接", "out", null, { text: selected.text });
       ctx.onBubble?.(selected.text);
@@ -2450,22 +2455,31 @@ async function runTurn(ctx, ui) {
         handled = true;
       } else if (r11.route === "SHOW_60") {
         const prepared = prepareStageReply(r11.state);
-        step("N24a", "输出：60% 阶段消息", "out", null, { text: cfg.p60_bubble });
+        step("N24a", "输出：60% 阶段消息", "out", null, {
+          text: cfg.p60_bubble,
+        });
         ctx.onBubble?.(cfg.p60_bubble);
         const o = await model("N24", "② 60% 核心洞察", "P5", {
           rel_facts: r11.rel_facts_text,
           life_facts: r11.life_facts_text,
         });
-        const r25 = code("N25", "组装 60% 阶段卡",
-          () => N25(cfg, prepared.state, o), { llm_out: o });
-        const stagedReply = !ctx.onBubble && prepared.reply
-          ? prepared.reply + "\n\n" + r25.reply : r25.reply;
+        const r25 = code(
+          "N25",
+          "组装 60% 阶段卡",
+          () => N25(cfg, prepared.state, o),
+          { llm_out: o },
+        );
+        const stagedReply =
+          !ctx.onBubble && prepared.reply
+            ? prepared.reply + "\n\n" + r25.reply
+            : r25.reply;
         finish("N25", stagedReply, r25.new_state);
         handled = true;
       } else if (r11.route === "GENERATE_PROFILE") {
         const prepared = prepareStageReply(r11.state);
         await profile(prepared.state, false);
-        if (!ctx.onBubble && prepared.reply) reply = prepared.reply + "\n\n" + reply;
+        if (!ctx.onBubble && prepared.reply)
+          reply = prepared.reply + "\n\n" + reply;
         handled = true;
       }
       st = r11.state;
