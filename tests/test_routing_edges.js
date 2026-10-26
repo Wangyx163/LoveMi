@@ -19,7 +19,7 @@ check('P6 的伴侣期待在新版90字上限内保留模型原文，超过上�
  const render=text=>JSON.parse(api.N32(cfg,JSON.stringify(st),JSON.stringify({core:'你有自己的生活节奏。',expect_ta:text,love_style:''}),JSON.stringify({daily:''})).new_state).profile;
  const accepted=render(expect);assert.equal(accepted.expect_ta,expect);assert.equal(accepted.source.expect_ta,'model');
  const overlong=render(expect+'有时间也能一起慢慢计划以后。');
- assert.equal(overlong.source.expect_ta,'template');assert(overlong.expect_ta.length<=90);assert(!overlong.expect_ta.includes('有时间也能一起慢慢计划以后'));
+ assert.equal(overlong.source.expect_ta,'generation_error');assert(overlong.expect_ta.length<=90);assert(!overlong.expect_ta.includes('有时间也能一起慢慢计划以后'));
 });
 check('相处最小信息同时校验字段和对象，包括矛盾附注',()=>{
  const st=api.newState(cfg);st.facts=[fact('Q4','pace','TA')];
@@ -38,13 +38,13 @@ check('跨题信息覆盖后半全部主问题时，开放补充前仍插入节�
  next._und={answer_status:'nothing_to_add',parse_ok:true};
  const routed=api.N11(cfg,JSON.stringify(next),'没有补充','{}');assert.equal(JSON.parse(routed.state).plan.task,'Q12');
 });
-check('后半末题说不清，补充题之后先重问再开放补充',()=>{
+check('Q10不登记延后重问，补充题后正常开放补充',()=>{
  const st=api.newState(cfg);st.stage='S40';st.current={task:'Q10',qtype:'MAIN',text:cfg.tasks.Q10.script};st.asked={S40:3};
  for(const id of ['Q5','Q7','Q6','Q9'])st.tasks[id].a=1;
  st._und={answer_status:'unclear',parse_ok:true};const first=api.N11(cfg,JSON.stringify(st),'不知道','{}');
  assert.equal(first.action,'SUPPLEMENT');const after=JSON.parse(api.N23(cfg,first.state,first.candidate_q).new_state);
  after._und={answer_status:'nothing_to_add',parse_ok:true};const second=api.N11(cfg,JSON.stringify(after),'没什么补充','{}');
- assert.equal(second.action,'REPLACE_LATER');assert.equal(JSON.parse(second.state).plan.task,'Q10');
+ assert.equal(second.action,'ASK_NEXT');assert.equal(JSON.parse(second.state).plan.task,'Q12');
 });
 check('阶段卡只识别明确的画像动作，不对关键词做子串匹配',()=>{
  for(const text of ['我还没完成','我不想生成画像','继续聊'])assert.equal(api.N02(cfg,JSON.stringify(ready40()),text).branch,'CONTINUE_40');
@@ -177,8 +177,11 @@ check('本轮承接不会跨输入重放，60%继续按钮不复用历史承接'
   assert.equal(calls.length,1);assert.equal(calls[0].pid,'P1B',sample.label+' 不能因回答简短而被前置规则拦截');
   assert.deepEqual(written.map(f=>[f.field,f.sub,f.value,f.evidence]),sample.facts.map(f=>[f.field,f.sub,f.value,f.evidence]));
   assert.equal(state._und.answer_status,sample.status);assert.equal(state.tasks.Q7.refused,sample.refused?1:0);
-  assert.equal(state.pending.some(p=>p.task==='Q7'),!!sample.pending,'不明确的缺项仍按原有隔题重问处理');
-  assert.equal(state.current.task,'Q6');assert(!trace.some(t=>['N14','N17'].includes(t.id)),'本轮不新增澄清模型调用');
+  assert.equal(state.pending.some(p=>p.task==='Q7'),false,'Q7不进入普通延后重问');
+  const oneKnown=sample.facts.length===1;
+  assert.equal(state.current.task,oneKnown?'Q7':'Q6');
+  if(oneKnown){assert.equal(state.current.text,cfg.q7_followup.drink);assert.equal(state.tasks.Q7.fu,1);}
+  assert(!trace.some(t=>['N14','N17'].includes(t.id)),'单项补问直接用系统模板');
  }
  passed++;console.log('✓ 桩结果回归：短否定交给P1B，单项/双项事实和未确定缺项按原规则处理');
  {

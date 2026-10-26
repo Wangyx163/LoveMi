@@ -6,6 +6,8 @@
   const storage={get(key){try{return JSON.parse(localStorage.getItem(key));}catch{return null;}},set(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch{}},remove(key){try{localStorage.removeItem(key);}catch{}}};
   const preview=new URLSearchParams(location.search).get('preview');
   let config,promptSet,stateJson='',messages=[],busy=false,connected=false,toastTimer;
+  let sessionGeneration=0,activeRequest=null,requestSequence=0,businessDispatcher=null;
+  let businessEvents=[],businessReceipts=[];
   const room=$('conversation'),input=$('message-input');
   const cleanText=text=>String(text||'').replace(/\n*— 画像进度\s*[\d.]+%\s*$/,'').trim();
   const el=(tag,className,text)=>{const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;};
@@ -13,7 +15,48 @@
   function toast(text){$('toast').textContent=text;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,3500);}
   function scrollToLatest(){requestAnimationFrame(()=>{room.scrollTop=room.scrollHeight;});}
   function setProgress(value){const progress=Math.min(100,Math.max(0,Math.round(Number(value)||0)));$('app').style.setProperty('--progress',progress+'%');$('progress-value').textContent=progress;$('progress').setAttribute('aria-valuenow',String(progress));}
-  function persist(){if(!preview&&stateJson)storage.set(sessionKey,{stateJson,messages});}
+  function persist(){if(!preview&&stateJson)storage.set(sessionKey,{stateJson,messages,businessEvents,businessReceipts});}
+  const newTurnId=()=>window.crypto?.randomUUID?.()||`ui_${Date.now()}_${++requestSequence}_${Math.random().toString(36).slice(2)}`;
+  function requestIsCurrent(request){return activeRequest===request&&sessionGeneration===request.generation;}
+  function queueBusinessEvents(events){for(const event of events||[]){if(!businessEvents.some(item=>item.idempotency_key===event.idempotency_key))businessEvents.push(event);}}
+  async function retryBusinessEvents(){
+    const generation=sessionGeneration;
+    const pending=businessEvents.filter(event=>!businessReceipts.some(receipt=>receipt.idempotency_key===event.idempotency_key&&receipt.accepted));
+    if(!pending.length)return [];
+    const factory=window.LoveMiEngine?.BusinessEvents?.createDispatcher;
+    if(!factory)return pending.map(event=>({type:event.type,idempotency_key:event.idempotency_key,accepted:false,error_code:'not_configured'}));
+    if(!businessDispatcher){
+      const handlers={};
+      for(const name of ['onFactsUpdated','onProfileReady']){
+        handlers[name]=event=>{
+          const adapter=window.lovemiBusinessAdapter;
+          if(typeof adapter?.[name]!=='function')return Promise.resolve({accepted:false,error_code:'not_configured'});
+          return new Promise((resolve,reject)=>{
+          const timer=setTimeout(()=>reject(Error('business_delivery_timeout')),10000);
+          Promise.resolve().then(()=>adapter[name](event)).then(resolve,reject).finally(()=>clearTimeout(timer));
+        });
+        };
+      }
+      // A later host registration can retry events that previously had no adapter.
+      businessDispatcher=factory(handlers);
+      if(!Object.keys(handlers).length)businessDispatcher=null;
+      const dispatcher=businessDispatcher||factory({});
+      const receipts=await dispatcher.dispatch(pending);
+      if(generation!==sessionGeneration)return receipts;
+      recordReceipts(receipts);return receipts;
+    }
+    const receipts=await businessDispatcher.dispatch(pending);
+    if(generation===sessionGeneration)recordReceipts(receipts);
+    return receipts;
+  }
+  function recordReceipts(receipts){for(const receipt of receipts){const index=businessReceipts.findIndex(item=>item.idempotency_key===receipt.idempotency_key);if(index<0)businessReceipts.push(receipt);else businessReceipts[index]=receipt;}persist();}
+  function showProfileSend(){
+    const state=currentState();
+    if(state?.stage!=='PROFILE_READY'||!config.profile_send_enabled||!config.profile_send)return;
+    const key=`${state.session_id||'legacy'}:${state.profile_version||1}`;
+    if(messages.some(message=>message.type==='profile-send'&&message.profile_key===key))return;
+    addMessage({type:'profile-send',role:'bot',text:config.profile_send,profile_key:key});
+  }
   function addMessage(message,{save=false,scroll=true}={}){messages.push(message);renderMessage(message);if(save)persist();if(scroll&&!preview)scrollToLatest();}
   function bubble(message){
     const node=el('div','message '+(message.role==='user'?'user':'bot'),message.text);
@@ -37,24 +80,117 @@
   function candidateCards(cards){const group=el('div','candidate-group');cards.forEach((card,index)=>{const wrapper=el('article','candidate-card');wrapper.setAttribute('aria-label',card.name+'的人物卡');const inner=el('div','candidate-inner');if(card.source==='need'&&card.filter_hit?.count){inner.append(el('span','match-count','✦ 满足'+card.filter_hit.count+'个筛选条件'));}const identity=el('div','candidate-identity'),portrait=el('div','portrait-wrap'),image=el('img','candidate-portrait');image.src='assets/portrait-'+(index%3+1)+'.jpg';image.alt=card.name+'的示例头像';image.loading='lazy';portrait.append(image,el('span','online-dot'));const info=el('div','candidate-info'),name=el('h2','candidate-name',card.name);name.append(verifiedIcon());info.append(name,el('p','candidate-meta',[card.age?card.age+'岁':'',card.city,card.school].filter(Boolean).join(' · ')));identity.append(portrait,info);inner.append(identity,renderTags(card.tags,'candidate-tags'));wrapper.append(inner);group.append(wrapper);});group.append(el('p','experience-note','以上为体验人物，仅用于了解你的偏好'));room.append(group);}
   function button(text,action,style='primary'){const node=el('button','button '+style,text);node.type='button';node.dataset.action=action;return node;}
   function cardBase(title,mascot){const card=el('article','profile-card'+(mascot==='peek'?' full-profile':''));const heading=el('h2','profile-heading',title);heading.append(el('span','sparkles','✦'));const image=el('img','card-cat '+mascot);image.src='assets/lovemi-cat-'+mascot+'.png';image.alt='';card.append(heading,image);return card;}
-  function stageCard(data){const card=cardBase('LoveMi眼中的你','laptop');card.setAttribute('aria-label','60% 阶段画像');card.append(el('div','insight',stageInsightText(data.attitude)),renderTags(data.tags));card.append(button(config.buttons.p60[0],'continue'),button(config.buttons.p60[1],'generate','secondary'));room.append(card);}
-  function fullProfile(data){$('app').classList.add('complete-profile');const card=cardBase('我的画像','peek');card._profile=data;card.setAttribute('aria-label','完整个人画像');card.append(el('div','insight',data.core));const sections=[['我对TA的期待',data.expect_ta,'☆'],['兴趣日常',data.daily,'♨'],['我的相处方式',data.love_style,'♧']];for(const [title,text,decoration] of sections){const section=el('section','profile-section');section.append(el('h3','',title),el('p','',text),el('span','section-decoration'+(title==='兴趣日常'?' mug':''),decoration));if(title==='兴趣日常')section.append(renderTags(data.tags));card.append(section);}const actions=el('div','profile-actions');actions.append(button('保存画像','save','secondary'),button('回到首页','home'));card.append(actions);room.append(card);}
-  function renderMessage(message){if(message.type==='cards')candidateCards(message.cards);else if(message.type==='stage-card')stageCard(message.data);else if(message.type==='profile')fullProfile(message.data);else bubble(message);}
+  function stageCard(data){
+    const card=cardBase('LoveMi眼中的你','laptop');card.setAttribute('aria-label','60% 阶段画像');
+    const attitude=typeof data.attitude==='string'?stageInsightText(data.attitude):'';
+    if(attitude)card.append(el('div','insight',attitude));
+    else if(typeof data.stage_feedback==='string'&&data.stage_feedback.trim())card.append(el('p','stage-feedback',data.stage_feedback));
+    if(data.tags?.length)card.append(renderTags(data.tags));
+    card.append(button(config.buttons.p60[0],'continue'),button(config.buttons.p60[1],'generate','secondary'));room.append(card);
+  }
+  function profileData(data){
+    const result={tags:Array.isArray(data?.tags)?data.tags:[],section_state:{...data?.section_state}};
+    for(const key of ['expect_ta','daily','love_style']){
+      const status=data?.section_state?.[key];
+      result[key]=(!status||status==='generated')&&typeof data?.[key]==='string'?data[key].trim():'';
+    }
+    result.empty_message=['expect_ta','daily','love_style'].every(key=>result.section_state[key]==='no_evidence')
+      ? String(config.profile_empty_message||'') : '';
+    return result;
+  }
+  function fullProfile(inputData){
+    const data=profileData(inputData);$('app').classList.add('complete-profile');
+    const card=cardBase('我的画像','peek');card._profile=data;card.setAttribute('aria-label','完整个人画像');
+    if(data.empty_message)card.append(el('p','profile-empty',data.empty_message));
+    const sections=[['expect_ta','我对TA的期待','☆'],['daily','兴趣日常','♨'],['love_style','我的相处方式','♧']];
+    for(const [key,title,decoration] of sections){
+      if(!data[key])continue;
+      const section=el('section','profile-section');section.dataset.section=key;
+      section.append(el('h3','',title),el('p','',data[key]),el('span','section-decoration'+(key==='daily'?' mug':''),decoration));
+      if(key==='daily'&&data.tags.length)section.append(renderTags(data.tags));card.append(section);
+    }
+    const actions=el('div','profile-actions');actions.append(button('保存画像','save','secondary'),button('回到首页','home'));card.append(actions);room.append(card);
+  }
+  function renderMessage(message){if(message.type==='profile-send'&&!config.profile_send_enabled)return;if(message.type==='cards')candidateCards(message.cards);else if(message.type==='stage-card')stageCard(message.data);else if(message.type==='profile')fullProfile(message.data);else bubble(message);}
   function showTyping(){if($('typing'))return;const node=el('div','typing');node.id='typing';node.setAttribute('role','status');for(let i=0;i<3;i++)node.append(el('span'));node.append(el('small','typing-label','LoveMi 在认真听'));room.append(node);scrollToLatest();}
   function hideTyping(){$('typing')?.remove();}
   function syncControls(){const state=currentState(),stage=state?.stage;const cardStage=['AWAIT_60','PROFILE_READY','PROFILE_GEN','DONE','EXITED'].includes(stage);$('chat-footer').hidden=cardStage||!!preview;input.disabled=busy;$('send').disabled=busy||!input.value.trim();$('back').disabled=busy;$('quick-replies').replaceChildren();if(!cardStage&&!preview){const replies=stage==='INTRO'?['准备好了～']:['还没想好','不想说'];for(const text of replies){const chip=el('button','',text);chip.type='button';chip.disabled=busy;chip.onclick=()=>send(text);$('quick-replies').append(chip);}}$('app').classList.toggle('profile-ready',cardStage);$('app').classList.toggle('complete-profile',stage==='PROFILE_READY');for(const node of room.querySelectorAll('button[data-action]'))node.disabled=busy;}
-  async function serviceReady(){try{const response=await fetch('/api/status',{cache:'no-store'});if(!response.ok){console.warn('LoveMi service unavailable',response.status);return false;}const status=await response.json();return status.ok===true;}catch(error){console.warn('LoveMi service unavailable',error.message);return false;}}
-  async function llm(id,pid,sys,user,tier,signal){return window.lovemiLocalModel({id,pid,sys,user,tier},signal);}
-  async function send(text,{quiet=false}={}){text=String(text||'').trim();if(!text||busy)return;const before=currentState();if(before&&['S60','S40','AWAIT_60'].includes(before.stage)&&!connected){connected=await serviceReady();if(!connected){toast('聊天服务暂时未连接，请稍后重试。');return;}}busy=true;input.value='';input.style.height='';if(!quiet)addMessage({role:'user',text});syncControls();showTyping();const trace=[];try{const result=await runTurn({cfg:config,prompts:promptSet,stateJson,p1:'B',trace,llm,enforceTimeout:false,onBubble:text=>{hideTyping();addMessage({role:'bot',text:cleanText(text),sticker:'paw'});showTyping();}},text);hideTyping();stateJson=result.newState;const state=currentState();const clean=cleanText(result.reply);const nodeIds=new Set(trace.map(step=>step.id));if(nodeIds.has('N36')&&state.cards.length){const heading=clean.split('【Demo')[0].trim();if(heading)addMessage({role:'bot',text:heading});addMessage({type:'cards',cards:state.cards});addMessage({role:'bot',text:state.current.text});}else if(nodeIds.has('N25')){addMessage({type:'stage-card',data:state.stage_card_60});}else if(nodeIds.has('N32')){const data={...state.profile};for(const [key,slot] of [['expect_ta','expect'],['daily','daily'],['love_style','love']])if(!data[key])data[key]=fbText(config,state,slot);addMessage({type:'profile',data});}else if(!before&&state.stage==='INTRO'){const paragraphs=clean.split(/\n\n+/);paragraphs.forEach((paragraph,index)=>addMessage({role:'bot',text:paragraph,sticker:index===0?'paw':'bulb'}));}else if(before?.stage==='INTRO'&&state.stage==='S60'&&state.current?.task==='NEED'){addIntroReply(clean);}else if(state.saved&&text===config.buttons.p100[0]){storage.set(profileKey,{...state.profile,saved_at:Date.now()});toast('画像已保存');}else if(state.stage==='DONE'){showHome();}else if(state.stage==='EXITED'){showHome();}else if(clean){addMessage({role:'bot',text:clean});}setProgress(state.progress);persist();}catch(error){hideTyping();toast('刚才连接有点不顺，再试一次吧。');console.error('LoveMi conversation failed',error);}finally{busy=false;syncControls();if(currentState()?.stage==='PROFILE_READY'){requestAnimationFrame(()=>{const card=room.querySelector('.full-profile:last-child');(card?.previousElementSibling||card)?.scrollIntoView({block:'start',behavior:'smooth'});});}else scrollToLatest();}}
+  async function serviceReady(signal){try{const response=await fetch('/api/status',{cache:'no-store',signal});if(!response.ok){console.warn('LoveMi service unavailable',response.status);return false;}const status=await response.json();return status.ok===true;}catch(error){if(error.name!=='AbortError')console.warn('LoveMi service unavailable',error.message);return false;}}
+  async function callModel(request,id,pid,sys,user,tier,signal){
+    const controller=new AbortController(),abort=()=>controller.abort();
+    const signals=[request.controller.signal,signal].filter(Boolean);
+    for(const source of signals){if(source.aborted)abort();else source.addEventListener('abort',abort,{once:true});}
+    try{return await window.lovemiLocalModel({id,pid,sys,user,tier},controller.signal);}
+    finally{for(const source of signals)source.removeEventListener('abort',abort);}
+  }
+  async function send(text,{quiet=false}={}){
+    text=String(text||'').trim();if(!text||busy)return;
+    const before=currentState();
+    // Completed profiles accept the existing two buttons only, never a SEND reply.
+    if(before&&['PROFILE_READY','DONE','EXITED'].includes(before.stage)&&!(quiet&&config.buttons.p100.includes(text)))return;
+    const request={generation:sessionGeneration,turnId:newTurnId(),controller:new AbortController()};
+    activeRequest=request;busy=true;syncControls();
+    const trace=[];
+    try{
+      if(before&&['S60','S40','AWAIT_60'].includes(before.stage)&&!connected){
+        const ready=await serviceReady(request.controller.signal);
+        if(!requestIsCurrent(request))return;
+        connected=ready;
+        if(!connected){toast('聊天服务暂时未连接，请稍后重试。');return;}
+      }
+      input.value='';input.style.height='';if(!quiet)addMessage({role:'user',text});showTyping();
+      const result=await runTurn({cfg:config,prompts:promptSet,stateJson,turnId:request.turnId,p1:'B',trace,
+        llm:(...args)=>callModel(request,...args),enforceTimeout:false,onBubble:text=>{
+          if(!requestIsCurrent(request))return;
+          hideTyping();addMessage({role:'bot',text:cleanText(text),sticker:'paw'});showTyping();
+        }},text);
+      if(!requestIsCurrent(request))return;
+      hideTyping();stateJson=result.newState;
+      const state=currentState(),clean=cleanText(result.reply),nodeIds=new Set(trace.map(step=>step.id));
+      if(!result.duplicate){
+        if(nodeIds.has('N36')&&state.cards.length){
+          const heading=clean.split('【Demo')[0].trim();if(heading)addMessage({role:'bot',text:heading});
+          addMessage({type:'cards',cards:state.cards});addMessage({role:'bot',text:state.current.text});
+        }else if(nodeIds.has('N25'))addMessage({type:'stage-card',data:state.stage_card_60});
+        else if(nodeIds.has('N32'))addMessage({type:'profile',data:profileData(state.profile)});
+        else if(!before&&state.stage==='INTRO'){
+          const paragraphs=clean.split(/\n\n+/);paragraphs.forEach((paragraph,index)=>addMessage({role:'bot',text:paragraph,sticker:index===0?'paw':'bulb'}));
+        }else if(before?.stage==='INTRO'&&state.stage==='S60'&&state.current?.task==='NEED')addIntroReply(clean);
+        else if(state.saved&&text===config.buttons.p100[0]){storage.set(profileKey,{...profileData(state.profile),flow_progress:state.progress,saved_at:Date.now()});toast('画像已保存在本机');}
+        else if(state.stage==='DONE'||state.stage==='EXITED')showHome();
+        else if(clean)addMessage({role:'bot',text:clean});
+      }
+      showProfileSend();setProgress(state.progress);queueBusinessEvents(result.events);persist();
+      // Business delivery never holds the chat lock or implies a successful save.
+      void retryBusinessEvents().catch(error=>console.warn('LoveMi business delivery failed',error.message));
+    }catch(error){
+      if(!requestIsCurrent(request))return;
+      hideTyping();if(error.name!=='AbortError'){toast('刚才连接有点不顺，再试一次吧。');console.error('LoveMi conversation failed',error);}
+    }finally{
+      if(requestIsCurrent(request)){
+        activeRequest=null;busy=false;syncControls();
+        if(currentState()?.stage==='PROFILE_READY')requestAnimationFrame(()=>{
+          if(request.generation!==sessionGeneration)return;
+          const cards=room.querySelectorAll('.full-profile'),card=cards[cards.length-1];
+          (card?.previousElementSibling||card)?.scrollIntoView({block:'start',behavior:'smooth'});
+        });else scrollToLatest();
+      }
+    }
+  }
   function showHome(){$('home-screen').hidden=false;$('home-profile').hidden=!storage.get(profileKey)&&!currentState()?.profile;$('home-continue').textContent=currentState()?.stage==='DONE'?'重新和 LoveMi 聊聊':'继续和 LoveMi 聊聊';$('menu').hidden=true;}
-  function restoreRoom(){room.replaceChildren();for(const message of messages)renderMessage(message);setProgress(currentState()?.progress);syncControls();scrollToLatest();}
-  async function restart(){$('restart-dialog').close();$('home-screen').hidden=true;messages=[];stateJson='';storage.remove(sessionKey);room.replaceChildren();setProgress(0);await send('开始',{quiet:true});}
+  function restoreRoom(){room.replaceChildren();for(const message of messages)renderMessage(message);showProfileSend();persist();setProgress(currentState()?.progress);syncControls();scrollToLatest();}
+  async function restart(){
+    sessionGeneration++;activeRequest?.controller.abort();activeRequest=null;busy=false;
+    businessEvents=[];businessReceipts=[];businessDispatcher=null;
+    $('restart-dialog').close();$('home-screen').hidden=true;messages=[];stateJson='';storage.remove(sessionKey);
+    room.replaceChildren();setProgress(0);await send('开始',{quiet:true});
+  }
   function sampleProfile(){return {core:'独立，不代表疏离；\n认真沟通，才更容易靠近。',expect_ta:'希望遇见一个真诚、有耐心的人。不需要时时刻刻黏在一起，但愿意分享生活里的小事，遇到问题也能好好沟通，让彼此都能自在地做自己。',daily:'平时喜欢窝在家里看电影，偶尔约上朋友探探店、喝杯咖啡。天气好的时候也愿意出门运动，比起把日程排得满满当当，更喜欢随性一点的生活。',love_style:'刚认识时可能有点慢热，但熟悉之后会愿意主动分享自己的生活。在关系里，你看重坦诚和信任，希望两个人既能互相依靠，也能保留各自的小天地。',tags:['看电影','逛展','周末宅家','喜欢独处']};}
   function showPreview(mode){$('app').classList.add('preview-mode');const state=newState(config);const profile=sampleProfile();if(mode==='60'){state.stage='AWAIT_60';state.progress=60;state.stage_card_60={attitude:profile.core,tags:profile.tags};stateJson=JSON.stringify(state);addMessage({type:'stage-card',data:state.stage_card_60});}else if(mode==='100'){state.stage='PROFILE_READY';state.progress=100;state.profile=profile;stateJson=JSON.stringify(state);addMessage({role:'bot',text:config.profile_bubble,sticker:'paw'});addMessage({type:'profile',data:profile});}else if(mode==='cards'){state.stage='S60';state.progress=40;stateJson=JSON.stringify(state);const names=['小林','小满','阿遥'];const cards=config.pool.filter(p=>names.includes(p.name)).slice(0,3).map(p=>({...p,source:'need',filter_hit:{count:3},tags:p.tags.filter(id=>config.tag_lib[id]).map(id=>config.tag_lib[id].text).slice(0,6)}));addMessage({type:'cards',cards});}else{state.stage='S60';state.progress=20;stateJson=JSON.stringify(state);addMessage({role:'bot',text:config.intro.hello,sticker:'paw'});addIntroReply(config.tasks.NEED.script);addMessage({role:'user',text:'尊重边界'});addMessage({role:'bot',text:'尊重边界，不错，给彼此保留一点空间',sticker:'bulb'});}setProgress(state.progress);syncControls();room.scrollTop=0;}
   $('composer').addEventListener('submit',event=>{event.preventDefault();send(input.value);});input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,112)+'px';$('send').disabled=busy||!input.value.trim();});input.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();send(input.value);}});
-  room.addEventListener('click',async event=>{const action=event.target.closest('button[data-action]')?.dataset.action;if(!action||busy)return;const state=currentState();if(action==='continue'||action==='generate'){if(state?.stage!=='AWAIT_60'){toast('这一阶段已经聊过啦～');return;}if(preview){location.search=action==='generate'?'?preview=100':'?preview=chat';return;}await send(config.buttons.p60[action==='continue'?0:1],{quiet:true});}else if(action==='save'){const data=event.target.closest('.profile-card')?._profile||state?.profile;if(!data)return;storage.set(profileKey,{...data,saved_at:Date.now()});if(!preview&&state?.stage==='PROFILE_READY')await send(config.buttons.p100[0],{quiet:true});else toast('画像已保存');}else if(action==='home'){if(!preview&&state?.stage==='PROFILE_READY')await send(config.buttons.p100[1],{quiet:true});else showHome();}});
-  $('back').onclick=()=>{if(!$('home-screen').hidden){$('home-screen').hidden=true;return;}showHome();};$('home-continue').onclick=()=>{if(currentState()?.stage==='DONE'||currentState()?.stage==='EXITED')restart();else{$('home-screen').hidden=true;restoreRoom();}};$('home-profile').onclick=()=>{const profile=currentState()?.profile||storage.get(profileKey);if(!profile)return;$('home-screen').hidden=true;room.replaceChildren();fullProfile(profile);setProgress(100);$('chat-footer').hidden=true;};$('more').onclick=()=>{$('menu').hidden=!$('menu').hidden;$('more').setAttribute('aria-expanded',String(!$('menu').hidden));};$('restart').onclick=()=>{$('menu').hidden=true;$('restart-dialog').showModal();};$('cancel-restart').onclick=()=>$('restart-dialog').close();$('confirm-restart').onclick=restart;document.addEventListener('click',event=>{if(!event.target.closest('#menu')&&!event.target.closest('#more'))$('menu').hidden=true;});
-  async function init(){try{const [cfgResponse,promptResponse]=await Promise.all([fetch('data/config.json',{cache:'no-store'}),fetch('data/prompts.json',{cache:'no-store'})]);if(!cfgResponse.ok||!promptResponse.ok)throw new Error('Configuration unavailable');[config,promptSet]=await Promise.all([cfgResponse.json(),promptResponse.json()]);if(preview){showPreview(preview);return;}connected=await serviceReady();const previous=storage.get(sessionKey);if(previous?.stateJson&&Array.isArray(previous.messages)){const old=JSON.parse(previous.stateJson);if(old.v===1){stateJson=previous.stateJson;messages=previous.messages;restoreRoom();if(['DONE','EXITED'].includes(old.stage))showHome();return;}}await send('开始',{quiet:true});}catch(error){console.error('LoveMi could not start',error);addMessage({role:'bot',text:'页面还没准备好，请刷新后再试一次。'});syncControls();}}
-  window.lovemiUI={getState:currentState,send,restart};
+  room.addEventListener('click',async event=>{const action=event.target.closest('button[data-action]')?.dataset.action;if(!action||busy)return;const state=currentState();if(action==='continue'||action==='generate'){if(state?.stage!=='AWAIT_60'){toast('这一阶段已经聊过啦～');return;}if(preview){location.search=action==='generate'?'?preview=100':'?preview=chat';return;}await send(config.buttons.p60[action==='continue'?0:1],{quiet:true});}else if(action==='save'){const data=event.target.closest('.profile-card')?._profile||state?.profile;if(!data)return;if(!preview&&state?.stage==='PROFILE_READY')await send(config.buttons.p100[0],{quiet:true});else{storage.set(profileKey,{...profileData(data),saved_at:Date.now()});toast('画像已保存');}}else if(action==='home'){if(!preview&&state?.stage==='PROFILE_READY')await send(config.buttons.p100[1],{quiet:true});else showHome();}});
+  $('back').onclick=()=>{if(!$('home-screen').hidden){$('home-screen').hidden=true;return;}showHome();};$('home-continue').onclick=()=>{if(currentState()?.stage==='DONE'||currentState()?.stage==='EXITED')restart();else{$('home-screen').hidden=true;restoreRoom();}};$('home-profile').onclick=()=>{const profile=currentState()?.profile||storage.get(profileKey);if(!profile)return;$('home-screen').hidden=true;room.replaceChildren();fullProfile(profile);setProgress(profile.flow_progress??currentState()?.progress??0);$('chat-footer').hidden=true;};$('more').onclick=()=>{$('menu').hidden=!$('menu').hidden;$('more').setAttribute('aria-expanded',String(!$('menu').hidden));};$('restart').onclick=()=>{$('menu').hidden=true;$('restart-dialog').showModal();};$('cancel-restart').onclick=()=>$('restart-dialog').close();$('confirm-restart').onclick=restart;document.addEventListener('click',event=>{if(!event.target.closest('#menu')&&!event.target.closest('#more'))$('menu').hidden=true;});
+  async function init(){try{const [cfgResponse,promptResponse]=await Promise.all([fetch('data/config.json',{cache:'no-store'}),fetch('data/prompts.json',{cache:'no-store'})]);if(!cfgResponse.ok||!promptResponse.ok)throw new Error('Configuration unavailable');[config,promptSet]=await Promise.all([cfgResponse.json(),promptResponse.json()]);if(preview){showPreview(preview);return;}connected=await serviceReady();const previous=storage.get(sessionKey);if(previous?.stateJson&&Array.isArray(previous.messages)){const old=JSON.parse(previous.stateJson);if(old.v===1){stateJson=previous.stateJson;messages=previous.messages;businessEvents=Array.isArray(previous.businessEvents)?previous.businessEvents:[];businessReceipts=Array.isArray(previous.businessReceipts)?previous.businessReceipts:[];restoreRoom();void retryBusinessEvents();if(['DONE','EXITED'].includes(old.stage))showHome();return;}}await send('开始',{quiet:true});}catch(error){console.error('LoveMi could not start',error);addMessage({role:'bot',text:'页面还没准备好，请刷新后再试一次。'});syncControls();}}
+  window.lovemiUI={getState:currentState,send,restart,retryBusinessEvents,getBusinessReceipts:()=>businessReceipts.map(receipt=>({...receipt}))};
   init();
 })();

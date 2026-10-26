@@ -15,19 +15,28 @@ const replaceRequired=(text,pattern,replacement,label)=>{
 
 function compileRuntime({pids=PIDS}={}){
   if(!Array.isArray(pids)||!pids.length||pids.some(pid=>!PIDS.includes(pid)))throw Error('Invalid prompt selection');
+  const embedded='/* PROFILE_EVIDENCE_START (generated from src/profile_evidence.js) */\nconst ProfileEvidence = (() => { const module = {exports:{}};\n'+read('src/profile_evidence.js')+'\nreturn module.exports; })();\n/* PROFILE_EVIDENCE_END */';
+  if(!read('src/engine.js').startsWith(embedded))throw Error('Evidence module differs from embedded engine; synchronize explicitly');
+  const businessBlock='/* BUSINESS_EVENTS_START (generated from src/business_events.js) */\nconst BusinessEvents = (() => { const module = {exports:{}};\n'+read('src/business_events.js')+'\nreturn module.exports; })();\n/* BUSINESS_EVENTS_END */';
+  if(!read('src/engine.js').includes(businessBlock))throw Error('Business events module differs from embedded engine; synchronize explicitly');
   const shared=read('prompts/shared_behavior.txt').trimEnd();
   if(!shared||shared.includes('{{'))throw Error('Shared behavior must be static text');
   const prompts=JSON.parse(read('data/prompts.json'));
+  delete prompts.P1;
+  delete prompts.P6E;
   for(const pid of pids){
     const template=read('prompts/'+pid+'_system.txt').trimEnd();
     if((template.match(/\{\{shared_behavior\}\}/g)||[]).length!==1)throw Error(pid+' must reference shared behavior once');
     prompts[pid].sys=template.replace('{{shared_behavior}}',shared);
     prompts[pid].user=read('prompts/'+pid+'_user.txt').trimEnd();
   }
+  prompts.PE={sys:read('prompts/PE_system.txt').trimEnd(),user:read('prompts/PE_user.txt').trimEnd()};
   const cfg=JSON.parse(read('data/config.json'));
   const htmlFile='LoveMi_在线测试版_v1.9.html';
   let html=read(htmlFile);
-  const start=html.indexOf('/* ===== LoveMi Coze Demo 引擎');
+  let start=html.indexOf('/* ===== LoveMi Coze Demo 引擎');
+  const evidenceStart=html.indexOf('/* PROFILE_EVIDENCE_START');
+  if(evidenceStart>=0 && evidenceStart<start)start=evidenceStart;
   const end=html.indexOf('/* ===== 特殊场景测试用例',start);
   if(start<0||end<=start)throw Error('Missing embedded engine markers');
   html=html.slice(0,start)+read('src/engine.js').trimEnd()+'\n\n'+html.slice(end);
@@ -57,13 +66,31 @@ if(LS.get('lm_need_intake_revision')!==NEED_INTAKE_REVISION){
   const intakeCached=/\/\* ===== NEED intake config cache ===== \*\/[\s\S]*?\/\* ===== End NEED intake config cache ===== \*\//;
   if(intakeCached.test(html))html=html.replace(intakeCached,()=>intakeCacheBlock);
   else html=replaceRequired(html,/^let cfg=.*$/m,html.match(/^let cfg=.*$/m)?.[0]+'\n'+intakeCacheBlock,'intake config cache insertion');
+  const ownedKeys=['version','intro','intro_ack','weights','no_reask_tasks','no_replace_tasks','no_followup_tasks','need_intake','q7_followup','profile_send','profile_send_enabled','profile_empty_message','model_fail_reply','p60_bubble','profile_bubble','rec_text'];
+  const ownedTasks=['NEED','CARD_L1','LIFE','REL','Q5','Q7','Q6','Q9','Q10','Q12','SUP1','SUP2','SUP3','SUP4'];
+  const taskCopyKeys=['script','fallback','core','core_by_missing'];
+  const flowRevision='v22-'+crypto.createHash('sha256').update(JSON.stringify([ownedKeys.map(k=>cfg[k]),ownedTasks.map(k=>taskCopyKeys.map(field=>cfg.tasks[k][field]))])).digest('hex').slice(0,12);
+  const flowCacheBlock=`/* ===== V22 flow config cache ===== */
+const V22_FLOW_REVISION='${flowRevision}';
+if(LS.get('lm_v22_flow_revision')!==V22_FLOW_REVISION){
+  for(const key of ${JSON.stringify(ownedKeys)})if(DEFAULT_CONFIG[key]!==undefined)cfg[key]=clone(DEFAULT_CONFIG[key]);
+  for(const task of ${JSON.stringify(ownedTasks)})for(const field of ${JSON.stringify(taskCopyKeys)})if(DEFAULT_CONFIG.tasks[task][field]!==undefined)cfg.tasks[task][field]=clone(DEFAULT_CONFIG.tasks[task][field]);
+  LS.set('lm_cfg_v10',JSON.stringify(cfg));
+  LS.set('lm_v22_flow_revision',V22_FLOW_REVISION);
+}
+/* ===== End V22 flow config cache ===== */`;
+  const flowCached=/\/\* ===== V22 flow config cache ===== \*\/[\s\S]*?\/\* ===== End V22 flow config cache ===== \*\//;
+  if(flowCached.test(html))html=html.replace(flowCached,()=>flowCacheBlock);
+  else html=html.replace('/* ===== End NEED intake config cache ===== */','/* ===== End NEED intake config cache ===== */\n'+flowCacheBlock);
   // Migrate only the prompt set owned by these source templates. Existing stage
-  // rules, question configuration, the legacy P1 and other local edits persist.
-  const revision='shared-'+crypto.createHash('sha256').update(JSON.stringify(PIDS.map(pid=>prompts[pid]))).digest('hex').slice(0,12);
+  // rules, question configuration and unrelated local edits persist.
+  const revision='shared-'+crypto.createHash('sha256').update(JSON.stringify([...PIDS,'PE'].map(pid=>prompts[pid]))).digest('hex').slice(0,12);
   const cacheBlock=`/* ===== Shared behavior prompt cache ===== */
 const SHARED_BEHAVIOR_REVISION='${revision}';
 if(LS.get('lm_shared_behavior_revision')!==SHARED_BEHAVIOR_REVISION){
-  for(const pid of ${JSON.stringify(PIDS)})prompts[pid]=clone(DEFAULT_PROMPTS[pid]);
+  delete prompts.P1;
+  delete prompts.P6E;
+  for(const pid of ${JSON.stringify([...PIDS,'PE'])})prompts[pid]=clone(DEFAULT_PROMPTS[pid]);
   LS.set('lm_prompts_v19_v11',JSON.stringify(prompts));
   LS.set('lm_shared_behavior_revision',SHARED_BEHAVIOR_REVISION);
 }
@@ -75,6 +102,17 @@ if(LS.get('lm_shared_behavior_revision')!==SHARED_BEHAVIOR_REVISION){
 }
 
 function syncRuntime({check=false,pids=PIDS}={}){
+  if(!check){
+    const source=read('src/engine.js');
+    const block='/* PROFILE_EVIDENCE_START (generated from src/profile_evidence.js) */\nconst ProfileEvidence = (() => { const module = {exports:{}};\n'+read('src/profile_evidence.js')+'\nreturn module.exports; })();\n/* PROFILE_EVIDENCE_END */';
+    const pattern=/\/\* PROFILE_EVIDENCE_START[^]*?\/\* PROFILE_EVIDENCE_END \*\//;
+    if(!pattern.test(source))throw Error('Missing evidence module markers');
+    let updated=source.replace(pattern,()=>block);
+    const businessBlock='/* BUSINESS_EVENTS_START (generated from src/business_events.js) */\nconst BusinessEvents = (() => { const module = {exports:{}};\n'+read('src/business_events.js')+'\nreturn module.exports; })();\n/* BUSINESS_EVENTS_END */';
+    const businessPattern=/\/\* BUSINESS_EVENTS_START[^]*?\/\* BUSINESS_EVENTS_END \*\//;
+    updated=businessPattern.test(updated) ? updated.replace(businessPattern,()=>businessBlock) : updated.replace('/* PROFILE_EVIDENCE_END */','/* PROFILE_EVIDENCE_END */\n'+businessBlock);
+    if(updated!==source)fs.writeFileSync(path.join(ROOT,'src/engine.js'),updated);
+  }
   const result=compileRuntime({pids});
   const json=JSON.stringify(result.prompts,null,2)+'\n';
   const currentPrompts=read('data/prompts.json');

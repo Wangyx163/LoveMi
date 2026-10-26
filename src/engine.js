@@ -1,8 +1,453 @@
+/* PROFILE_EVIDENCE_START (generated from src/profile_evidence.js) */
+const ProfileEvidence = (() => { const module = {exports:{}};
+/* LoveMi Evidence Mapper: standalone proposal; CommonJS, Node >=18.
+ * Does NOT change the registration state machine. Only call during profile generation.
+ */
+'use strict';
+const SCENES = ['expect_ta', 'love_style', 'p7'];
+const SUBJECTS = ['自己', 'TA', '关系', '候选反馈'];
+const KINDS = [
+  'partner_preference', 'attraction', 'self_interaction',
+  'relationship_expectation', 'relationship_experience',
+  'daily_life', 'other'
+];
+const normalized = x => String(x ?? '').normalize('NFKC').replace(/[\p{P}\p{S}\p{Z}\p{C}\s]/gu, '').toLowerCase();
+const uniq = arr => [...new Set(arr)];
+const isNonempty = v => typeof v === 'string' && !!v.trim();
+const isContentQuote = v => isNonempty(v) && normalized(v).length > 0;
+
+// Reuse Q12 from the existing, short in-session dialog; no external fetch or new model call.
+// Do not infer task identity from historic question wording.
+function q12DialogText(st, options = {}) {
+  if (options.includeQ12Raw === false) return null;
+  const q12MaxChars = Math.max(1, Math.min(320, Number(options.q12MaxChars) || 320));
+  const rows = Array.isArray(st.dialog) ? st.dialog : [];
+  const valid = rows.filter(d => d && d.task_id === 'Q12' &&
+    ['answered','partial'].includes(d.answer_status) && isNonempty(d.a));
+  const last = valid.at(-1);
+  if (!last) return null;
+  // PII filtering is a defense in depth; production should reuse central PII filters.
+  // Redact before truncation so a phone number straddling the limit cannot leak
+  // as an incomplete number that no longer matches the PII filter.
+  const raw = String(last.a)
+    .replace(/(?:\+?86[-\s]?)?1[3-9]\d{9}/g, '【联系方式已省略】')
+    .replace(/\b\d{7,}\b/g, '【联系方式已省略】')
+    .replace(/(?:微信|vx|wx|QQ|qq|电话|手机)[号:：\s]*[A-Za-z0-9_-]{5,}/gi, '【联系方式已省略】')
+    .slice(0, q12MaxChars);
+  const content = raw.replace(/【联系方式已省略】/g, '').trim();
+  if (!isContentQuote(content) || /^(?:没有|暂无|无|没了|不确定|都行)[。！!～~\s]*$/.test(content)) return null;
+  return { raw, turn: last.turn, question: String(last.q || '').slice(0, 240) };
+}
+
+function buildMapperInput(state, options = {}) {
+  const st = typeof state === 'string' ? JSON.parse(state) : state;
+  const facts = (st.facts || []).filter(f => f.active && f.status === '已确认');
+  const q12 = q12DialogText(st, options);
+  const factInputs = facts.map(f => ({
+      fact_id: `F${f.ver}`,
+      field: f.field,
+      sub: f.sub,
+      subject: f.subject,
+      value: f.value,
+      quote: f.evidence,
+      condition: f.condition || '',
+      polarity: f.polarity || '肯定',
+      strength: f.strength || '偏好',
+      priority: f.priority || 'normal',
+      turn: f.turn,
+      task_id: f.src || '',
+      question_text: f.source_question || '',
+      raw_answer: f.src === 'Q12' && q12 && f.turn === q12.turn
+        ? q12.raw : '',
+    }));
+  // When P1B did not extract a Q12 fact, the explicit answer can still be used
+  // as a cited input to the profile-only Mapper. NEVER write it to matching facts.
+  const hasQ12Fact = facts.some(f => f.src === 'Q12' &&
+    (q12 && f.turn === q12.turn));
+  if (q12 && !hasQ12Fact) {
+    factInputs.push({ fact_id: `Q12_RAW_T${q12.turn}`, field: 'Q12', sub: 'raw',
+      subject: '待判', value: q12.raw, quote: q12.raw,
+      raw_answer: q12.raw, condition: '', polarity: '肯定',
+      task_id: 'Q12', turn: q12.turn, question_text: q12.question,
+      source_class: 'answered_unstructured_not_confirmed'
+    });
+  }
+  return {
+    version: 'evidence-v1',
+    facts: factInputs,
+    conflicts: (st.notes || []).filter(n => n.active).map(n => ({
+      field: n.field, sub: n.sub, subject: n.subject,
+      quote: n.evidence, note: n.note || '', turn: n.turn
+    })),
+    // The Q12 original is already held in the in-session dialog, never a new
+    // persistent profile field. raw_answer in facts carries it to the Mapper.
+    q12_raw_included: Boolean(q12)
+  };
+}
+
+function validateMapper(input, raw) {
+  const o = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  if (!o || !Array.isArray(o.atoms) || !o.routes || !Array.isArray(o.links))
+    throw new Error('mapper_schema_invalid');
+  const original = new Map(input.facts.map(f => [f.fact_id, f]));
+  if (o.atoms.length > Math.max(8, input.facts.length * 4 + 8))
+    throw new Error('mapper_too_many_atoms');
+  const atoms = new Map();
+  for (const a of o.atoms) {
+    if (!a || !isNonempty(a.id) || atoms.has(a.id) ||
+        !SUBJECTS.includes(a.subject) || !KINDS.includes(a.kind) ||
+        !Array.isArray(a.source_fact_ids) || !a.source_fact_ids.length ||
+        !isContentQuote(a.quote) || !isNonempty(a.meaning) || a.meaning.length > 160) throw new Error('mapper_atom_invalid');
+    const sources = a.source_fact_ids.map(id => original.get(id));
+    if (sources.some(s => !s)) throw new Error('mapper_unknown_source');
+    // Grounding is exact; normalization is used only for content checks/deduplication.
+    const supportedSources = sources.filter(s => [s.raw_answer, s.quote]
+      .some(v => isNonempty(v) && v.includes(a.quote)));
+    if (!supportedSources.length)
+      throw new Error('mapper_quote_not_grounded');
+    if (!['explicit', 'derived_from_source'].includes(a.basis))
+      throw new Error('mapper_basis_invalid');
+    if (!supportedSources.some(s => s.field === 'Q12' || s.subject === a.subject))
+      throw new Error('mapper_subject_conflict');
+    atoms.set(a.id, { ...a, source_fact_ids: uniq(a.source_fact_ids), source_facts: sources.map(s => ({subject:s.subject, value:s.value, polarity:s.polarity, condition:s.condition, strength:s.strength, quote:s.quote})) });
+  }
+  const routes = {};
+  for (const scene of SCENES) {
+    const route = o.routes[scene];
+    if (!route || !Array.isArray(route.primary) || !Array.isArray(route.secondary))
+      throw new Error('mapper_route_missing_' + scene);
+    for (const id of [...route.primary, ...route.secondary])
+      if (!atoms.has(id)) throw new Error('mapper_route_unknown_atom');
+    const primary = uniq(route.primary);
+    const secondary = uniq(route.secondary).filter(id => !primary.includes(id));
+    routes[scene] = { primary, secondary };
+  }
+  const links = o.links.map(l => {
+    if (!l || !Array.isArray(l.ids) || uniq(l.ids).length < 2 ||
+        !l.ids.every(id => atoms.has(id)) ||
+        !['explicit', 'candidate'].includes(l.basis))
+      throw new Error('mapper_link_invalid');
+    return { ids: uniq(l.ids), relation: String(l.relation || '').slice(0, 40), basis: l.basis };
+  });
+  return { atoms: [...atoms.values()], routes, links, version: 'evidence-v1' };
+}
+
+const PRIMARY_KINDS = {
+  expect_ta: new Set(['partner_preference', 'attraction', 'relationship_expectation']),
+  love_style: new Set(['self_interaction', 'relationship_expectation', 'relationship_experience']),
+  p7: new Set(['daily_life'])
+};
+const PRIMARY_SUBJECTS = {
+  expect_ta: new Set(['TA', '候选反馈', '关系']),
+  love_style: new Set(['自己', '关系']),
+  p7: new Set(['自己'])
+};
+// Conservative, provisional detail check: duplicated/contained quotes or meanings
+// cannot turn one observation into two anchors, even with different IDs/kinds.
+function distinctDetails(a, b) {
+  const separate = (x, y) => x && y && !x.includes(y) && !y.includes(x);
+  const x = normalized(a.quote), y = normalized(b.quote);
+  if (!separate(x, y) || !separate(normalized(a.meaning), normalized(b.meaning))) return false;
+  // Overlapping extracts from a short statement are not additional detail.
+  for (let n = Math.max(2, Math.ceil(Math.min(x.length, y.length) / 2)); n < Math.min(x.length, y.length); n++)
+    if (x.endsWith(y.slice(0, n)) || y.endsWith(x.slice(0, n))) return false;
+  return true;
+}
+function classifyEvidence(mapper) {
+  const idx = new Map(mapper.atoms.map(a => [a.id, a]));
+  const result = {};
+  for (const scene of SCENES) {
+    const r = mapper.routes[scene];
+    // In the first release, only explicit evidence can count as a primary anchor.
+    const primary = r.primary.filter(id => {
+      const a = idx.get(id);
+      return a && a.basis === 'explicit' && PRIMARY_KINDS[scene].has(a.kind) &&
+        PRIMARY_SUBJECTS[scene].has(a.subject);
+    });
+    const secondary = r.secondary.filter(id => idx.has(id));
+    if (!primary.length) {
+      result[scene] = { level: 'insufficient', primary: [], secondary, reason: 'no_valid_primary_anchor' };
+      continue;
+    }
+    let level, reason;
+    if (scene === 'expect_ta') {
+      // One meaningful, explicit partner preference is a valid writing anchor.
+      // Candidate appearance/photo feedback alone permits a local impression only.
+      const hasPreference = primary.some(id => idx.get(id).kind === 'partner_preference');
+      const hasRelationExpectation = primary.some(id => idx.get(id).kind === 'relationship_expectation');
+      const attractionOnly = primary.every(id => idx.get(id).kind === 'attraction');
+      level = hasPreference || hasRelationExpectation ? 'sufficient' : 'limited';
+      reason = hasPreference ? 'explicit_partner_preference' :
+        hasRelationExpectation ? 'explicit_relationship_expectation' :
+          attractionOnly ? 'attraction_only_local_impression' : 'local_evidence_only';
+    } else {
+      // For other scenes, these are provisional heuristics, not calibrated scores.
+      const multipleDetails = primary.some((id, i) => primary.slice(i + 1)
+        .some(other => distinctDetails(idx.get(id), idx.get(other))));
+      const relevant = new Set([...primary, ...secondary]);
+      const explicitLink = mapper.links.some(l =>
+        l.basis === 'explicit' && isContentQuote(l.relation) &&
+        l.ids.some(id => primary.includes(id) && l.ids.some(other =>
+          other !== id && relevant.has(other) && idx.get(other).basis === 'explicit' &&
+          distinctDetails(idx.get(id), idx.get(other)))));
+      level = multipleDetails || explicitLink ? 'sufficient' : 'limited';
+      reason = multipleDetails ? 'distinct_complementary_details' : explicitLink ? 'explicit_supporting_link' : 'single_anchor_no_support';
+    }
+    result[scene] = {
+      level, primary, secondary,
+      reason
+    };
+  }
+  return result;
+}
+
+function formatAtoms(mapper, ids) {
+  const idx = new Map(mapper.atoms.map(a => [a.id, a]));
+  return ids.map(id => idx.get(id)).filter(Boolean).map(a => ({
+    id: a.id, meaning: String(a.meaning || '').slice(0, 160),
+    subject: a.subject, kind: a.kind,
+    quote: a.quote, source_fact_ids: a.source_fact_ids,
+    time_scope: a.time_scope || 'unknown',
+    condition: a.condition || '', source_facts: a.source_facts || []
+  }));
+}
+function makeProfileInputs(state, mapper, levels, options = {}) {
+  const st = typeof state === 'string' ? JSON.parse(state) : state;
+  const e = {
+    status: 'ok', version: 'evidence-v1',
+    expect_ta: { ...levels.expect_ta,
+      primary_facts: formatAtoms(mapper, levels.expect_ta.primary),
+      secondary_facts: formatAtoms(mapper, levels.expect_ta.secondary) },
+    love_style: { ...levels.love_style,
+      primary_facts: formatAtoms(mapper, levels.love_style.primary),
+      secondary_facts: formatAtoms(mapper, levels.love_style.secondary) },
+    relations: mapper.links.filter(l =>
+      [...levels.expect_ta.primary, ...levels.love_style.primary].some(id => l.ids.includes(id)))
+  };
+  const c60 = st.stage_card_60 || {};
+  const p7 = levels.p7;
+  return {
+    rel_facts: JSON.stringify(e),
+    life_facts: JSON.stringify({
+      role: 'relationship_background_only',
+      facts: formatAtoms(mapper, uniq([
+        ...levels.expect_ta.secondary, ...levels.love_style.secondary
+      ]).filter(id => mapper.atoms.find(a => a.id === id)?.kind === 'daily_life'))
+    }),
+    p7_life_facts: JSON.stringify({
+      level: p7.level,
+      primary: formatAtoms(mapper, p7.primary),
+      secondary: formatAtoms(mapper, p7.secondary)
+    }),
+    // Keep the current N29 contract until C06 is explicitly confirmed.
+    p60_insight: options.p60_insight !== undefined ? options.p60_insight :
+      (c60.content_status === 'ok' && isNonempty(c60.attitude) ? c60.attitude : '无'),
+    evidence_levels: {
+      expect_ta: levels.expect_ta.level,
+      love_style: levels.love_style.level,
+      daily: levels.p7.level
+    }
+  };
+}
+module.exports = { buildMapperInput, validateMapper, classifyEvidence, makeProfileInputs };
+
+return module.exports; })();
+/* PROFILE_EVIDENCE_END */
+/* BUSINESS_EVENTS_START (generated from src/business_events.js) */
+const BusinessEvents = (() => { const module = {exports:{}};
+'use strict';
+
+// V2.2 business boundary. Pure event builders read only committed engine state;
+// they do not call a model, infer facts, create a database or claim a save.
+const clone = value => JSON.parse(JSON.stringify(value));
+const record = value => value && typeof value === 'object' && !Array.isArray(value);
+const text = value => typeof value === 'string' ? value : '';
+const uniq = values => [...new Set(values)];
+const revision = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
+const GROUPS = ['partner_preferences', 'self_life', 'relationship', 'candidate_feedback', 'self_extra', 'supplement'];
+const SECTION_KEYS = ['expect_ta', 'daily', 'love_style'];
+const activeFacts = state => (state.facts || []).filter(f => record(f) && f.active === true && f.status === '已确认');
+
+function classification(fact) {
+  if (fact.field === 'NEED' && fact.subject === 'TA') return 'partner_preferences';
+  if (fact.field === 'CARD') return 'candidate_feedback';
+  if (fact.field === 'SELF') return 'self_extra';
+  if (fact.field === 'Q12') return 'supplement';
+  if (['Q4', 'Q8', 'Q9', 'Q10', 'Q11'].includes(fact.field)) return 'relationship';
+  if (['Q1', 'Q2', 'Q3', 'Q5', 'Q6', 'Q7'].includes(fact.field)) return 'self_life';
+  throw Error('business_unknown_fact_classification');
+}
+
+function publicFact(fact, state, includeEvidence) {
+  const result = {
+    field: fact.field, sub: fact.sub, subject: fact.subject, value: clone(fact.value),
+    polarity: fact.polarity || '肯定', condition: fact.condition || '',
+    op: fact.op === 'correct' ? 'correct' : 'add', ver: fact.ver, active: true,
+  };
+  if (fact.field === 'NEED') {
+    result.strength = fact.strength === '硬性' ? '硬性' : '偏好';
+    result.priority = fact.priority === 'core' ? 'core' : 'normal';
+  }
+  if (includeEvidence) result.evidence = text(fact.evidence);
+  if (fact.field === 'CARD') {
+    // Resolve labels only against the actual recorded card set. Do not attach
+    // today's displayed candidate to a historical feedback fact.
+    result.card_set_id = text(fact.card_set_id);
+    const ids = Array.isArray(fact.candidate_ids) ? fact.candidate_ids :
+      fact.candidate_id !== undefined && fact.candidate_id !== null ? [fact.candidate_id] : [];
+    result.candidate_ids = uniq(ids.filter(id => typeof id === 'string' || typeof id === 'number'));
+    result.candidate_id = result.candidate_ids.length === 1 ? result.candidate_ids[0] : null;
+    result.candidate_resolution = result.candidate_ids.length && result.card_set_id ? 'resolved' :
+      fact.value === '都没感觉' ? 'none_selected' : 'unresolved';
+  }
+  return result;
+}
+
+function currentSnapshot(state, {includeEvidence = false} = {}) {
+  const snapshot = Object.fromEntries(GROUPS.map(key => [key, []]));
+  for (const fact of activeFacts(state)) snapshot[classification(fact)].push(publicFact(fact, state, includeEvidence));
+  return snapshot;
+}
+
+function currentTagIds(state) {
+  // Display-only fallback atmosphere tags are not business facts.
+  return uniq(Object.values(state.tags || {}).filter(Array.isArray).flat().filter(t =>
+    record(t) && (t.tag_id !== undefined || t.id !== undefined) && !t.fallback && t.source !== 'fallback'
+  ).map(t => t.tag_id ?? t.id)).sort();
+}
+
+function identity(state, options) {
+  const sessionId = text(options.sessionId || state.session_id).trim();
+  if (!sessionId) throw Error('business_session_id_required');
+  if (state.session_id && state.session_id !== sessionId) throw Error('business_session_id_conflict');
+  return {session_id: sessionId, turn_id: text(options.turnId || state.turn_id) || `turn_${revision(state.turn)}`};
+}
+
+function factsSignature(state) {
+  const facts = activeFacts(state).map(f => publicFact(f, state, false));
+  return JSON.stringify({facts, tags: currentTagIds(state), need_tags: uniq(state.need_tags || []).sort()});
+}
+
+function prepareFactsUpdated(before, after, options = {}) {
+  const state = clone(after), ids = identity(state, options);
+  const prior = before.business_events || {}, meta = state.business_events || {};
+  const signature = factsSignature(state);
+  state.session_id = ids.session_id;
+  state.facts_revision = Math.max(revision(before.facts_revision), revision(state.facts_revision));
+  if (signature === factsSignature(before) || meta.last_facts_signature === signature) return {state, event: null};
+  const oldFacts = new Map(activeFacts(before).map(f => [f.ver, f]));
+  const newFacts = activeFacts(state), newVersions = new Set(newFacts.map(f => f.ver));
+  const changes = newFacts.filter(f => !oldFacts.has(f.ver) ||
+    JSON.stringify(publicFact(oldFacts.get(f.ver), before, false)) !== JSON.stringify(publicFact(f, state, false))
+  ).map(f => ({...publicFact(f, state, !!options.includeEvidence), source_op: f.op === 'correct' ? 'correct' : 'add', op: 'upsert'}));
+  const deactivated = [...oldFacts.keys()].filter(ver => !newVersions.has(ver));
+  // A tag-only recomputation is also a useful replacement snapshot, not an
+  // instruction to append tags. Versions advance once per committed change set.
+  state.facts_revision += 1;
+  state.business_events = {...prior, ...meta, last_facts_signature: signature};
+  const idempotencyKey = JSON.stringify([ids.session_id, ids.turn_id, state.facts_revision]);
+  const event = {
+    type: 'onFactsUpdated', name: 'onFactsUpdated', idempotency_key: idempotencyKey,
+    ...ids, task_id: text(options.taskId || after.current?.task), facts_revision: state.facts_revision,
+    changes, deactivated_fact_versions: deactivated,
+    current_facts: currentSnapshot(state, options),
+    current_need_tag_ids: uniq(state.need_tags || []).sort(), current_tag_ids: currentTagIds(state),
+  };
+  state.business_events.last_facts_event_key = idempotencyKey;
+  return {state, event};
+}
+
+function sectionState(profile, key) {
+  const explicit = profile.section_state?.[key];
+  if (['generated', 'no_evidence', 'generation_error'].includes(explicit)) return explicit;
+  const source = profile.source?.[key];
+  if (source === 'fixed_insufficient' || source === 'empty' || source === 'no_evidence') return 'no_evidence';
+  if (source === 'fixed_generation_error' || source === 'generation_error') return 'generation_error';
+  return text(profile[key]).trim() ? 'generated' : 'no_evidence';
+}
+
+function prepareProfileReady(input, options = {}) {
+  const state = clone(input), ids = identity(state, options);
+  if (state.stage !== 'PROFILE_READY' || !record(state.profile)) throw Error('business_profile_not_ready');
+  state.session_id = ids.session_id;
+  state.facts_revision = revision(state.facts_revision);
+  const meta = state.business_events || {};
+  // Repeated N32/refresh at the same facts revision is the same profile delivery,
+  // even if a retried stochastic model happens to generate different prose.
+  if (meta.last_profile_facts_revision === state.facts_revision && revision(state.profile_version)) return {state, event: null};
+  state.profile_version = revision(state.profile_version) + 1;
+  const statuses = Object.fromEntries(SECTION_KEYS.map(key => [key, sectionState(state.profile, key)]));
+  const profile = Object.fromEntries(SECTION_KEYS.map(key => [key,
+    statuses[key] === 'generated' ? text(state.profile[key]) : ''
+  ]));
+  const idempotencyKey = JSON.stringify([ids.session_id, state.profile_version]);
+  const event = {
+    type: 'onProfileReady', name: 'onProfileReady', idempotency_key: idempotencyKey,
+    ...ids, profile_version: state.profile_version, facts_revision: state.facts_revision,
+    flow_progress: Number.isFinite(state.progress) ? state.progress : 0,
+    core_60: text(state.stage_card_60?.attitude), profile, section_state: statuses,
+    empty_message: SECTION_KEYS.every(key => statuses[key] === 'no_evidence') ? text(state.profile.empty_message) : '',
+    current_facts: currentSnapshot(state, options),
+    current_tag_ids: currentTagIds(state), current_need_tag_ids: uniq(state.need_tags || []).sort(), status: 'ready',
+  };
+  state.business_events = {...meta, last_profile_facts_revision: state.facts_revision, last_profile_event_key: idempotencyKey};
+  return {state, event};
+}
+
+// Host injects its existing authenticated backend calls. No handler means no
+// network, no accepted receipt, and no claim that the profile was saved.
+function createDispatcher(handlers = {}) {
+  const completed = new Map(), inFlight = new Map(), sessionQueues = new Map(), latest = new Map();
+  async function deliver(event) {
+    const key = event.idempotency_key;
+    if (completed.has(key)) return {...completed.get(key), duplicate: true};
+    if (inFlight.has(key)) return inFlight.get(key);
+    const base = {type: event.type, idempotency_key: key, accepted: false};
+    if (typeof handlers[event.type] !== 'function') return {...base, error_code: 'not_configured'};
+    const work = (sessionQueues.get(event.session_id) || Promise.resolve()).then(async () => {
+      try {
+        const last = latest.get(event.session_id) || {facts: 0, profile: 0};
+        if (event.facts_revision < last.facts || (event.type === 'onProfileReady' && event.profile_version < last.profile)) {
+          return {...base, error_code: 'stale_version'};
+        }
+        const response = await handlers[event.type](clone(event));
+        const versionKey = event.type === 'onProfileReady' ? 'profile_version' : 'facts_revision';
+        const accepted = response?.accepted === true && response[versionKey] === event[versionKey] &&
+          (event.type !== 'onProfileReady' || response.facts_revision === undefined || response.facts_revision === event.facts_revision);
+        if (!accepted) return {...base, error_code: text(response?.error_code) || 'invalid_acknowledgement'};
+        const receipt = {...base, accepted: true, [versionKey]: response[versionKey]};
+        completed.set(key, receipt);
+        latest.set(event.session_id, {facts: Math.max(last.facts, event.facts_revision),
+          profile: event.type === 'onProfileReady' ? Math.max(last.profile, event.profile_version) : last.profile});
+        return receipt;
+      } catch (_) {
+        return {...base, error_code: 'delivery_failed'};
+      }
+    });
+    inFlight.set(key, work);
+    sessionQueues.set(event.session_id, work);
+    try { return await work; } finally {
+      inFlight.delete(key);
+      if (sessionQueues.get(event.session_id) === work) sessionQueues.delete(event.session_id);
+    }
+  }
+  return {dispatch: async events => {
+    const result = [];
+    // Keep facts replacement before profile publication when both share a turn.
+    for (const event of events || []) result.push(await deliver(event));
+    return result;
+  }};
+}
+
+module.exports = {prepareFactsUpdated, prepareProfileReady, currentSnapshot, currentTagIds, createDispatcher};
+
+return module.exports; })();
+/* BUSINESS_EVENTS_END */
 /* ===== LoveMi Coze Demo 引擎：与 Coze 代码节点逐一对应（JS 版） ===== */
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const S = (v) => JSON.stringify(v);
 function parseLoose(txt) {
-  if (txt && typeof txt === "object") return txt;
+  if (txt && typeof txt === "object") return Array.isArray(txt) ? {} : txt;
   let s = String(txt || "")
     .trim()
     .replace(/^```(?:json)?/gm, "")
@@ -10,7 +455,8 @@ function parseLoose(txt) {
     .trim();
   const m = s.match(/\{[\s\S]*\}/);
   try {
-    return JSON.parse(m ? m[0] : s);
+    const parsed = JSON.parse(m ? m[0] : s);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch (e) {
     return {};
   }
@@ -38,6 +484,9 @@ function newState(cfg) {
   for (const t in cfg.tasks) tasks[t] = newTaskState();
   return {
     v: 1,
+    session_id: newSessionId(),
+    facts_revision: 0,
+    profile_version: 0,
     stage: "S60",
     turn: 0,
     current: null,
@@ -111,60 +560,24 @@ function needIntake(st) {
 function needIntakeRoute(cfg, st, status) {
   const intake = needIntake(st);
   st.need_intake = intake;
-  if (intake.ready) return null;
-  const cur = st.current || {},
-    targets = cur.intake_target
-      ? [cur.intake_target]
-      : cur.intake_targets || ["height", "lifestyle"];
-  const scopedRefusals = (st._und.need_responses || [])
-    .filter((r) => r.status === "refused")
-    .map((r) => r.target);
-  if (status === "refused" || (st._und.refused_targets || []).includes("NEED"))
-    for (const target of scopedRefusals.length ? scopedRefusals : targets)
-      if (intake.missing.includes(target))
-        intake.responses[target] = { status: "refused", turn: st.turn };
-  const settings = cfg.need_intake,
-    limit = settings.max_questions ?? 2;
-  const target = intake.missing.find(
-    (t) =>
-      !intake.asked.includes(t) && intake.responses[t]?.status !== "refused",
-  );
-  let action, candidate;
-  if (target && intake.asked.length < limit && status !== "risk") {
-    intake.asked.push(target);
-    action = "NEED_CLARIFY";
-    candidate = settings.questions[target];
-    st.plan = {
-      action,
-      task: "NEED",
-      qtype: "NEED_CLARIFY",
-      intake_target: target,
-    };
-  } else {
-    action = "NEED_WAIT";
-    candidate = settings.wait_reply.replace(
-      "{missing}",
-      intake.missing
-        .map((t) => (t === "height" ? "身高偏好" : "生活方式偏好"))
-        .join("和"),
-    );
-    st.plan = {
-      action,
-      task: "NEED",
-      qtype: "NEED_CLARIFY",
-      intake_targets: intake.missing,
-    };
+  if (intake.ready || intake.completed || status === 'risk') return null;
+  if (st.current?.qtype === 'NEED_CLARIFY' || intake.asked.length) {
+    intake.completed = true;
+    return null;
   }
-  return {
-    state: S(st),
-    action,
-    route: "READY",
-    candidate_q: candidate,
-    q_task_spec: "",
-    rel_facts_text: "",
-    life_facts_text: "",
-    debug: `动作=${action} 待明确=${intake.missing.join("、")} 出卡门槛未满足`,
-  };
+  if (['refused','nothing_to_add','skipped'].includes(status)) {
+    intake.completed = true;
+    return null;
+  }
+  const targetsMissing = intake.missing;
+  const dimensions = targetsMissing.map(t => t === 'height' ? '身高' : '生活方式').join('和');
+  const candidateQuestion = cfg.need_intake.question_template
+    ? cfg.need_intake.question_template.replace('{{缺失维度}}', dimensions)
+    : targetsMissing.map(t => cfg.need_intake.questions[t]).join('');
+  intake.asked = [...targetsMissing];
+  st.plan = {action:'NEED_CLARIFY',task:'NEED',qtype:'NEED_CLARIFY',intake_targets:targetsMissing};
+  return {state:S(st),action:'NEED_CLARIFY',route:'READY',candidate_q:candidateQuestion,q_task_spec:'',rel_facts_text:'',life_facts_text:'',debug:'一次联合补问：'+targetsMissing.join(',')};
+
 }
 function itemMet(st, item, subjects) {
   const [fid, sub] = item.split(".");
@@ -308,8 +721,8 @@ function leadSpec(cfg, st, tid) {
 }
 function qOk(cfg, text) {
   const t = String(text || "").trim();
-  if (t.length < 4 || t.length > 80) return false;
-  if (qmarks(t) > 2) return false;
+  if ([...t].length < 4 || [...t].length > 40 || /[\r\n]/.test(t)) return false;
+  if (qmarks(t) > 1) return false;
   if (
     [...cfg.blocked.compliance, ...cfg.blocked.no_ask].some((w) =>
       t.includes(w),
@@ -322,12 +735,7 @@ function progressOf(cfg, st) {
   let p = 0;
   for (const [tid, w] of Object.entries(cfg.weights)) {
     const ts = st.tasks[tid];
-    p +=
-      cfg.tasks[tid].kind === "judge"
-        ? ts.done
-          ? w
-          : 0
-        : Math.min(w, (w * (ts.a + ts.h)) / (1 + ts.f));
+    if (cfg.tasks[tid]?.kind === 'main' && ts?.a) p += w;
   }
   return Math.round(p * 10) / 10;
 }
@@ -566,7 +974,7 @@ function N02(cfg, stateJson, ui) {
     const parts = String(cfg.tasks.NEED.script || "").split(/\n\s*\n/);
     if (cls === "accept") {
       const first = parts[0].trim();
-      if ([INTRO_ACCEPT, ack].includes(first)) parts.shift();
+      if (first === ack) parts.shift();
       else {
         const opening = ack.match(/^[^～。！？!?]+[～。！？!?]/)?.[0];
         if (opening && first.startsWith(opening))
@@ -697,7 +1105,7 @@ function N02(cfg, stateJson, ui) {
 function N38(raw) {
   raw = String(raw || "");
   const d = parseLoose(raw);
-  const ok =
+  let ok =
     !!d &&
     [
       "answered",
@@ -709,6 +1117,45 @@ function N38(raw) {
       "asks_back",
       "risk",
     ].includes(d.answer_status);
+  const record = x => x && typeof x === 'object' && !Array.isArray(x);
+  for (const key of ['facts','conflicts','need_responses']) {
+    if (d[key] !== undefined && (!Array.isArray(d[key]) || !d[key].every(record))) ok = false;
+  }
+  for (const key of ['refused_targets','need_tag_ids']) {
+    if (d[key] !== undefined && (!Array.isArray(d[key]) || !d[key].every(v => typeof v === 'string'))) ok = false;
+  }
+  for (const key of ['ack','reply_text','feedback_close','next_question_draft','turn_signal','card_level'])
+    if (d[key] !== undefined && typeof d[key] !== 'string') ok = false;
+  if (d.reference_task !== undefined && d.reference_task !== null && typeof d.reference_task !== 'string') ok=false;
+  if (d.ack_worthy !== undefined && typeof d.ack_worthy !== 'boolean') ok=false;
+  if (d.prefilter !== undefined && typeof d.prefilter !== 'string') ok=false;
+  if (d.turn_signal !== undefined && !['normal','user_question','flow_feedback'].includes(d.turn_signal)) ok=false;
+  if (d.card_level !== undefined && !['none','L1','L2','L3'].includes(d.card_level)) ok=false;
+  for (const key of ['followup','card_followup','card_interest'])
+    if (d[key] !== undefined && !record(d[key])) ok = false;
+  for (const [key,flag] of [['followup','worth'],['card_followup','needed']]) {
+    if (d[key]?.[flag] !== undefined && typeof d[key][flag] !== 'boolean') ok = false;
+    if (d[key]?.question !== undefined && typeof d[key].question !== 'string') ok = false;
+    if (d[key]?.[flag] === true && !d[key].question?.trim()) ok=false;
+  }
+  if (record(d.card_interest)) {
+    const c=d.card_interest;
+    if(c.target!==undefined&&c.target!==null&&typeof c.target!=='string')ok=false;
+    if(c.sentiment!==undefined&&!['positive','neutral','negative','unclear'].includes(c.sentiment))ok=false;
+    if(c.intensity!==undefined&&!['strong','normal','unclear'].includes(c.intensity))ok=false;
+  }
+  for (const f of Array.isArray(d.facts) ? d.facts : []) {
+    if (!record(f) || !['field','sub','subject','value','evidence'].every(k => typeof f[k] === 'string')) {ok=false;continue;}
+    for (const k of ['condition','polarity','strength','priority','op']) if(f[k] !== undefined && typeof f[k] !== 'string') ok=false;
+    if(f.op !== undefined && !['add','correct'].includes(f.op)) ok=false;
+    if(f.polarity !== undefined && !['肯定','否定'].includes(f.polarity)) ok=false;
+    if(f.strength !== undefined && !['硬性','偏好'].includes(f.strength))ok=false;
+    if(f.priority !== undefined && !['core','normal'].includes(f.priority))ok=false;
+  }
+  for (const f of Array.isArray(d.conflicts) ? d.conflicts : [])
+    if(!record(f)||!['field','sub','subject','evidence'].every(k=>typeof f[k]==='string')||(f.note!==undefined&&typeof f.note!=='string'))ok=false;
+  for (const f of Array.isArray(d.need_responses) ? d.need_responses : [])
+    if(!record(f)||!['target','status','evidence'].every(k=>typeof f[k]==='string'))ok=false;
   return {
     ok,
     reason: ok
@@ -726,7 +1173,7 @@ function N05(und) {
 /* ---------- N09 ---------- */
 function N09(cfg, stateStr, ui, undTxt) {
   const st = JSON.parse(stateStr),
-    und = parseLoose(undTxt),
+    und = N38(undTxt).ok ? parseLoose(undTxt) : {},
     fields = cfg.fields;
   st.notes = st.notes || [];
   const statusOk = [
@@ -739,7 +1186,9 @@ function N09(cfg, stateStr, ui, undTxt) {
     "asks_back",
     "risk",
   ];
-  const cands = [...(und.facts || [])];
+  const cands = [...(und.facts || [])].sort((a,b) =>
+    Number(b.field==='NEED'&&b.sub==='lifestyle'&&b.value==='不限'&&unconditional(b)) -
+    Number(a.field==='NEED'&&a.sub==='lifestyle'&&a.value==='不限'&&unconditional(a)));
   const written = [],
     rejected = [],
     nui = norm(ui);
@@ -763,7 +1212,7 @@ function N09(cfg, stateStr, ui, undTxt) {
     else {
       const d = fields[fid].subs[sub];
       if (d.type === "enum" && !d.values.includes(val)) reason = "枚举值不合法";
-      else if (d.type === "open" && (!val || String(val).length > 40))
+      else if (d.type === "open" && (!val || String(val).length > (fid === 'Q12' ? 320 : 40)))
         reason = "开放值为空或过长";
     }
     if (reason) {
@@ -817,13 +1266,16 @@ function N09(cfg, stateStr, ui, undTxt) {
         x.status === "已确认" &&
         x.field === fid &&
         x.sub === sub &&
-        x.subject === subj,
+        x.subject === subj &&
+        (fid !== 'CARD' || x.card_set_id === st.card_set_id),
     );
     const isEnum =
       fields[fid].subs[sub].type === "enum" && !fields[fid].subs[sub].multi;
-    if (same.some((x) => x.value === val) && f.op !== "correct") continue;
-    if (isEnum || f.op === "correct")
-      same.forEach((x) => {
+    const identical = same.some(x => x.value === val && (x.polarity||'肯定') === (f.polarity||'肯定') &&
+      (x.condition||'') === (f.condition||'') && (x.strength||'偏好') === (f.strength||'偏好') && (x.priority||'normal') === (f.priority||'normal'));
+    if (identical && f.op !== "correct") continue;
+    if (isEnum || f.op === "correct" || same.some(x => x.value===val))
+      same.filter(x => isEnum || f.op === 'correct' || x.value === val).forEach((x) => {
         x.active = false;
         x.superseded_turn = st.turn;
       });
@@ -836,6 +1288,12 @@ function N09(cfg, stateStr, ui, undTxt) {
       polarity: f.polarity || "肯定",
       condition: f.condition || "",
       strength: ["硬性", "偏好"].includes(f.strength) ? f.strength : "偏好",
+      ...(fid === 'NEED' ? {priority:f.priority==='core'?'core':'normal'} : {}),
+      ...(fid === 'CARD' ? {card_set_id:st.card_set_id||'',candidate_ids:(st.cards||[]).filter(c=>
+        String(val).split(/[、,，\s]+/).includes(c.key)||c.name&&(String(val).includes(c.name)||ev.includes(c.name))).map(c=>c.id)} : {}),
+      source_question: String(st.current?.text || "").slice(0, 300),
+      source_qtype: String(st.current?.qtype || ""),
+      source_parent_task: String(st.current?.parent_task_id || ""),
       evidence: ev,
       src: (st.current || {}).task || "",
       status: "已确认",
@@ -846,6 +1304,18 @@ function N09(cfg, stateStr, ui, undTxt) {
     };
     st.facts.push(rec);
     written.push(rec);
+  }
+  for (const feedback of written.filter(f => f.field==='CARD'&&f.sub==='l2'&&!f.candidate_ids.length)) {
+    // A single explicitly selected candidate is an unambiguous parent for its
+    // attraction feedback. Multiple selections stay unresolved rather than guessed.
+    let choices=written.filter(f=>f.field==='CARD'&&f.sub==='l1'&&f.candidate_ids.length);
+    if (!choices.length && st.current?.qtype==='CARD_FOLLOWUP') {
+      const named=(st.cards||[]).filter(c=>c.name&&String(st.current.text).includes(c.name));
+      if(named.length===1) feedback.candidate_ids=[named[0].id];
+      else choices=activeFacts(st).filter(f=>f.field==='CARD'&&f.sub==='l1'&&f.card_set_id===st.card_set_id);
+    }
+    const ids=[...new Set(choices.flatMap(f=>f.candidate_ids||[]))];
+    if(!feedback.candidate_ids.length&&ids.length===1)feedback.candidate_ids=ids;
   }
   for (const cf of und.conflicts || []) {
     const { field: fid, sub, subject: subj } = cf,
@@ -939,9 +1409,6 @@ function N09(cfg, stateStr, ui, undTxt) {
     for (const target of ["height", "lifestyle"])
       if (intake.known[target]) delete intake.responses[target];
   }
-  const tids = (und.need_tag_ids || []).filter((t) => cfg.tag_lib[t]);
-  if (tids.length)
-    st.need_tags = [...new Set([...(st.need_tags || []), ...tids])].sort();
   st._new = written;
   return {
     state: S(st),
@@ -957,6 +1424,9 @@ function N10(cfg, stateStr) {
     (st.notes || []).filter((n) => n.active).map((n) => n.field + "." + n.sub),
   );
   const facts = activeFacts(st).filter((f) => !ck.has(f.field + "." + f.sub));
+  st.need_tags = Object.entries(cfg.tag_lib||{}).filter(([id,t]) => facts.some(f =>
+    f.field==='NEED'&&f.subject==='TA'&&(f.polarity||'肯定')==='肯定'&&f.value!=='不限'&&
+    (String(f.value)===t.text || (t.kw||[]).some(k=>String(f.value).includes(k))))).map(([id])=>id).sort();
   const out = {};
   for (const scene of ["60", "100"]) {
     const hits = [];
@@ -1049,7 +1519,7 @@ function N11(cfg, stateStr, ui, hintStr) {
   if (tid === "NEED") st.need_status = status;
   st.dialog = [
     ...st.dialog,
-    { q: cur.text, a: String(ui).slice(0, inputLimit(cfg, tid)) },
+    { q: cur.text, a: String(ui).slice(0, inputLimit(cfg, tid)), task_id: tid, turn: st.turn, answer_status: status },
   ].slice(-8);
   const hold = (text, why) => {
     st.plan = { action: "HOLD", task: tid, qtype };
@@ -1070,13 +1540,10 @@ function N11(cfg, stateStr, ui, hintStr) {
     status = "skipped";
   } // 口头关怀一句，主流程照常推进
   if (und.parse_ok === false) {
-    if (!cur.fail) {
-      cur.fail = 1;
-      return hold(cfg.model_fail_reply + "\n\n" + cur.text, "模型失败");
-    }
-    status = "unclear";
+    cur.fail = (cur.fail||0)+1;
+    return hold(cfg.model_fail_reply + "\n\n" + cur.text, "模型失败，不结算");
   }
-  if (status === "asks_back" && !suppressExtra) {
+  if (status === "asks_back" && !suppressExtra && !(cfg.no_reask_tasks||[]).includes(tid)) {
     if (!cur.hold) {
       const prefix = cfg.asks_back_template.replace(
         "{about}",
@@ -1126,7 +1593,7 @@ function N11(cfg, stateStr, ui, hintStr) {
   }
 
   for (const t in T)
-    if (cfg.tasks[t].kind === "main")
+    if (cfg.tasks[t]?.kind === "main")
       T[t].covered = covered(cfg, st, t) ? 1 : 0;
   const refused = new Set(und.refused_targets || []);
   if (status === "refused" && ["MAIN", "REPLACE", "FOLLOW_UP"].includes(qtype))
@@ -1169,7 +1636,7 @@ function N11(cfg, stateStr, ui, hintStr) {
   } else if (!deferCurrent && qtype === "FOLLOW_UP") T[tid].h = 1;
   else if (!deferCurrent && qtype === "CARD_FOLLOWUP") T[tid].done = 1;
   st.pending = st.pending.filter(
-    (x) => !T[x.task].covered && !T[x.task].refused,
+    (x) => T[x.task] && !(cfg.no_replace_tasks||[]).includes(x.task) && !T[x.task].covered && !T[x.task].refused,
   );
   if (canBackfill) {
     targetState.rep += 1;
@@ -1244,6 +1711,10 @@ function N11(cfg, stateStr, ui, hintStr) {
       break;
     }
     T.CARD_L1.done = T.CARD_L1.a ? 1 : 0;
+  } else if (tid === 'Q7' && qtype === 'MAIN' && !suppressExtra && ['answered','partial'].includes(status) && !T[tid].refused && missing(cfg,st,tid).length===1 && T[tid].fu===0) {
+    const sub=missing(cfg,st,tid)[0].split('.')[1];
+    action='FOLLOW_UP';pTask=tid;pQ='FOLLOW_UP';cand=cfg.q7_followup?.[sub] || (sub==='smoke'?'你平常会抽烟吗？':'你平常喝酒吗？');
+    T[tid].fu=1;T[tid].f=1; // fixed missing-field clarification, separate from dynamic F budget
   } else if (qtype === "MAIN") {
     const fu = und.followup || {};
     if (
@@ -1330,7 +1801,7 @@ function N11(cfg, stateStr, ui, hintStr) {
     route = "SHOW_60";
     st.stage = "AWAIT_60";
     st.current = null;
-    st.progress = 60;
+    st.progress = progressOf(cfg, st);
   } else if (action === "GENERATE_PROFILE") {
     st.plan = { action };
     route = "GENERATE_PROFILE";
@@ -1462,6 +1933,10 @@ function selectAck(cfg, st) {
   const und = st._und || {};
   if (!und.answer_status || und.parse_ok === false)
     return { text: "", care: false };
+  if (['unclear','off_topic','refused'].includes(und.answer_status) && (cfg.lazy_ack||[]).length && und.turn_signal==='normal') {
+    const list=cfg.lazy_ack;
+    return {text:replyParagraph(list[(st.turn||0)%list.length].replace('{about}',cfg.tasks[st.current?.task]?.about||'这个')),care:false};
+  }
   const ack = replyParagraph(und.ack);
   const valid =
     ack &&
@@ -1473,13 +1948,13 @@ function selectAck(cfg, st) {
 function buildTurnReply(cfg, st) {
   // careLine 会消费状态，只选择一次，并将 care 标志传给输出节点。
   const selected = selectAck(cfg, st);
-  if (selected.care || st.plan?.action === "FEEDBACK_ASK") return selected;
+  if (selected.care) return selected;
   const und = st._und || {};
   if (und.parse_ok === false) return selected;
   if (["user_question", "flow_feedback"].includes(und.turn_signal)) {
     const candidates =
       und.turn_signal === "flow_feedback"
-        ? [und.feedback_close]
+        ? [und.reply_text,und.feedback_close]
         : [und.reply_text];
     for (const candidate of candidates) {
       const text = String(candidate || "")
@@ -1529,7 +2004,10 @@ function N23(cfg, stateStr, q) {
     st.current.hold = plan.hold || 1;
     q = replyParagraph(plan.prefix) + q;
   }
-  let reply = replyParagraph(ack) + q;
+  // 已确认的烟酒单项模板自带承接，避免再拼一条模型 ack。
+  const fixedQ7 = plan.task === 'Q7' && plan.qtype === 'FOLLOW_UP' &&
+    Object.values(cfg.q7_followup || {}).includes(q);
+  let reply = replyParagraph(fixedQ7 && !selected.care ? '' : ack) + q;
   reply += `\n\n— 画像进度 ${Math.floor((st.progress || 0) + 0.5)}%`;
   return { reply, new_state: S(st) };
 }
@@ -1565,22 +2043,10 @@ function fbText(cfg, st, slot) {
   const arr = (G[g] && G[g][slot]) || G.default[slot] || [""];
   return arr[(st.turn || 0) % arr.length];
 }
-// 标签：真实标签优先；不足 2 个时用兜底标签补位（兜底标签带 kind:'兜底'，不参与匹配）
+// 画像标签只展示已确认事实映射；缺少标签时留空，不把拒答方式写成人格。
 function withFallbackTags(cfg, st, real, min) {
-  min = min || cfg.fallback_min_tags;
-  const out = real.map((t) => ({ ...t, kind: "事实" }));
-  if (out.length >= min) return out;
-  const g = fbGroup(st);
-  const order = [
-    ...(cfg.fallback_tags[g] || []),
-    ...(g !== "default" ? cfg.fallback_tags.default || [] : []),
-  ];
-  for (const id of order) {
-    if (out.length >= min) break;
-    if (!out.some((t) => t.tag_id === id))
-      out.push({ tag_id: id, text: cfg.tag_text[id], kind: "兜底" });
-  }
-  return out;
+  return (real || []).filter(t => t.kind !== "兜底" && !cfg.tag_text?.[t.tag_id])
+    .map(t => ({ ...t, kind: "事实" }));
 }
 // 60% 标签：只用已确认事实映射出的标签，优先“情感 + 生活态度”各至少一个，共 3～4 个
 function pick60Tags(cfg, st) {
@@ -1638,23 +2104,20 @@ function stageInsightText(text) {
 function N25(cfg, stateStr, llmOut) {
   const st = JSON.parse(stateStr);
   const out = parseLoose(llmOut);
-  let line = String(out.attitude || "").trim(),
+  let line = typeof out.attitude === "string" ? out.attitude.trim() : "",
     status = "ok";
   const R = cfg.p60_card;
   if (
+    !hasInfo(st) ||
     line.length < R.insight_min ||
     line.length > R.insight_max ||
     [...cfg.blocked.compliance, ...cfg.blocked.no_label].some((w) =>
       line.includes(w),
     ) ||
-    out.insufficient
+    out.insufficient !== false
   ) {
-    status = "fallback";
-    line = p60Template(st);
-    if (!line)
-      line = hasInfo(st)
-        ? fbText(cfg, st, "core_some")
-        : fbText(cfg, st, "p60");
+    status = !hasInfo(st) || out.insufficient === true ? "no_evidence" : "generation_error";
+    line = "";
   }
   line = stageInsightText(line);
   const tags = pick60Tags(cfg, st);
@@ -1662,18 +2125,20 @@ function N25(cfg, stateStr, llmOut) {
   const parts = care
     ? [care, "", "【LoveMi 眼中的你】"]
     : ["【LoveMi 眼中的你】"];
-  if (line) parts.push(line);
+  const feedback = line ? "" : String(cfg.profile_empty60 || "");
+  if (line || feedback) parts.push(line || feedback);
   if (tags.length) parts.push(tags.map((t) => "#" + t.text).join("  "));
   parts.push(
     "",
     `「${cfg.buttons.p60[0]}」　「${cfg.buttons.p60[1]}」`,
-    "— 画像进度 60%",
+    `— 画像进度 ${Math.floor(st.progress + 0.5)}%`,
   );
   st.stage_card_60 = {
     attitude: line,
+    stage_feedback: feedback,
     tags,
     content_status: status,
-    fallback_group: status === "fallback" ? fbGroup(st) : "",
+    fallback_group: "",
   };
   return { reply: parts.join("\n"), new_state: S(st), content_status: status };
 }
@@ -1698,13 +2163,24 @@ function rowsOf(cfg, facts, notes, only) {
   }
   return out.join("\n") || "（暂无）";
 }
+function profileSupplement(st) {
+  const input = ProfileEvidence.buildMapperInput(st, {includeQ12Raw:true,q12MaxChars:320});
+  return [...new Set(input.facts.map(f => f.raw_answer || (f.field==='Q12'&&f.sub==='supplement' ? f.quote || f.value : '')).filter(v =>
+    typeof v === 'string' && v.trim() && !/^(?:没有|暂无|无|没了|不确定|都行)[。！!～~\s]*$/.test(v.trim()) &&
+    v.replace(/【联系方式已省略】/g, '').replace(/[\p{P}\p{S}\p{Z}\p{C}\s]/gu, '').length
+  ))].join('\n');
+}
 function N29(cfg, stateStr) {
   const st = JSON.parse(stateStr);
   const facts = activeFacts(st),
     notes = (st.notes || []).filter((n) => n.active);
   const c60 = st.stage_card_60 || {};
+  const supplement = profileSupplement(st);
+  const withSupplement = text => supplement
+    ? `${text}\n\n未分类的有效开放补充（仅用于原话实际支持的板块，不支持的板块留空；不转为匹配条件）：\n${supplement}`
+    : text;
   return {
-    rel_facts: rowsOf(cfg, facts, notes, [
+    rel_facts: withSupplement(rowsOf(cfg, facts, notes, [
       "NEED",
       "Q4",
       "Q8",
@@ -1714,8 +2190,8 @@ function N29(cfg, stateStr) {
       "CARD",
       "SELF",
       "Q12",
-    ]),
-    life_facts: rowsOf(cfg, facts, notes, [
+    ])),
+    life_facts: withSupplement(rowsOf(cfg, facts, notes, [
       "Q1",
       "Q2",
       "Q3",
@@ -1724,7 +2200,7 @@ function N29(cfg, stateStr) {
       "Q7",
       "SELF",
       "Q12",
-    ]),
+    ])),
     p60_insight:
       c60.content_status === "ok" && c60.attitude ? c60.attitude : "无",
     state: S(st),
@@ -1786,86 +2262,64 @@ function N32(cfg, stateStr, outRel, outLife) {
   const rel = parseLoose(outRel),
     life = parseLoose(outLife);
   const banned = [...cfg.blocked.compliance, ...cfg.blocked.no_label];
-  const ok = (t, mx) =>
-    t && t.length <= mx && !banned.some((w) => t.includes(w));
-  const info = hasInfo(st);
-  const src = {};
-  const pick = (key, txt, mx, fields) => {
-    txt = String(txt || "").trim();
-    if (ok(txt, mx)) {
-      src[key] = "model";
-      return txt;
-    }
-    const t = fields ? tpl(st, fields) : "";
-    if (t) {
-      src[key] = "template";
-      return t.slice(0, mx);
-    }
-    src[key] = "empty";
-    return "";
+  const src = {}, section_state = {};
+  const pe = st.profile_evidence_runtime;
+  const peOn = cfg.profile_evidence?.enabled && pe?.status === 'ok';
+  const facts = activeFacts(st).filter(f => String(f.value || '').trim() &&
+    !/^(?:没有|暂无|无|没了|不确定|都行|都没感觉)$/.test(String(f.value).trim()));
+  // A raw Q12 answer is profile-only evidence; the writer must allocate it by
+  // actual meaning. It never creates three facts or matching conditions here.
+  const hasSupplement = !!profileSupplement(st);
+  const evidence = {
+    expect_ta: facts.some(f => f.field === 'NEED' && f.subject === 'TA' ||
+      ['Q4','Q8','Q11'].includes(f.field) && ['TA','关系'].includes(f.subject) ||
+      f.field === 'CARD' && f.sub === 'l2'),
+    daily: facts.some(f => ['Q1','Q2','Q3','Q5','Q6','Q7','SELF'].includes(f.field) && f.subject === '自己'),
+    love_style: facts.some(f => ['Q4','Q8','Q9','Q10','Q11'].includes(f.field) && ['自己','关系'].includes(f.subject)),
   };
-  // 核心洞察沿用 60% 卡实际展示的原文，P6 不覆盖；阶段卡兜底也保持一致。
-  const c60 = st.stage_card_60 || {};
-  let core =
-    typeof c60.attitude === "string" && c60.attitude.trim() ? c60.attitude : "";
-  if (core)
-    src.core =
-      c60.content_status === "fallback" || c60.fallback_group
-        ? "fallback"
-        : "60%";
-  else {
-    core = info ? fbText(cfg, st, "core_some") : fbText(cfg, st, "core");
-    src.core = "fallback";
-  }
-  const expect = pick("expect_ta", rel.expect_ta, 90, ["NEED", "Q8"]),
-    daily = pick("daily", life.daily, 110, [
-      "Q1",
-      "Q2",
-      "Q3",
-      "Q5",
-      "Q6",
-      "Q7",
-    ]),
-    love = pick("love_style", rel.love_style, 100, ["Q4", "Q9", "Q10", "Q11"]);
+  const empty = (key, reason) => { src[key] = reason; section_state[key] = reason; return ''; };
+  const pick = (key, value, mx) => {
+    if (peOn ? pe.levels[key] === 'insufficient' : !evidence[key] && !hasSupplement)
+      return empty(key, 'no_evidence');
+    if (typeof value !== 'string') return empty(key, 'generation_error');
+    const text = value.trim().replace(/\s*[\r\n]+\s*/g, ' ');
+    if (!text) return empty(key, 'no_evidence');
+    if (text.length > mx || banned.some(w => text.includes(w))) return empty(key, 'generation_error');
+    src[key] = 'model'; section_state[key] = 'generated';
+    return text;
+  };
+  const expect = pick('expect_ta', rel.expect_ta, 90),
+    daily = pick('daily', life.daily, 110),
+    love = pick('love_style', rel.love_style, 100);
   const tags = withFallbackTags(cfg, st, (st.tags || {})["100"] || []);
   const tagLine = tags.length ? tags.map((t) => "#" + t.text).join("  ") : "";
   const care = careLine(cfg, st);
+  const emptyMessage = Object.values(section_state).every(value => value === 'no_evidence')
+    ? String(cfg.profile_empty_message || '').trim() : '';
   const lines = [
     ...(care ? [care, ""] : []),
     "【我的画像】",
     "",
-    "核心洞察",
-    core,
-    "",
   ];
-  if (!expect && !daily && !love) {
-    lines.push(fbText(cfg, st, "merged"), "");
-    if (tagLine) lines.push(tagLine, "");
-  } else {
-    lines.push(
-      "我对 TA 的期待",
-      expect || fbText(cfg, st, "expect"),
-      "",
-      "兴趣日常",
-      daily || fbText(cfg, st, "daily"),
-    );
-    if (tagLine) lines.push(tagLine);
-    lines.push("", "我的相处方式", love || fbText(cfg, st, "love"), "");
-  }
+  if (emptyMessage) lines.push(emptyMessage, '');
+  for (const [title,text] of [['我对 TA 的期待',expect],['兴趣日常',daily],['我的相处方式',love]])
+    if (text) lines.push(title, text, '');
+  if (tagLine) lines.push(tagLine, '');
   lines.push(`「${cfg.buttons.p100[0]}」　「${cfg.buttons.p100[1]}」`);
   st.stage = "PROFILE_READY";
   const fb = Object.entries(src)
-    .filter(([k, v]) => v !== "model" && v !== "60%")
+    .filter(([k, v]) => v !== "model")
     .map(([k]) => k);
   st.profile = {
-    core,
     expect_ta: expect,
     daily,
     love_style: love,
     tags,
     source: src,
-    fallback_group: fbGroup(st),
-    content_status: fb.length ? "fallback" : "ok",
+    section_state,
+    empty_message: emptyMessage,
+    fallback_group: "",
+    content_status: fb.length === 3 ? (Object.values(section_state).includes('generation_error') ? 'generation_error' : 'no_evidence') : fb.length ? "partial" : "ok",
   };
   return { reply: lines.join("\n"), new_state: S(st), fallback_sections: fb };
 }
@@ -2152,6 +2606,7 @@ function N36(cfg, stateStr) {
     };
   });
   st.cards = cards;
+  st.card_set_id = `${st.session_id||'session'}:cards:${st.turn}:${cards.map(c=>c.id).join('-')}`;
   st.rec = {
     mode,
     hard: hard.map((f) => `${f.sub}=${f.value}`),
@@ -2197,13 +2652,6 @@ function N36(cfg, stateStr) {
     };
     st.history.push({ task: "CARD_L1", qtype: "MAIN", text: q });
     body = [];
-    if (usedLevels.length)
-      body.push(
-        T.expand_note.replace(
-          "{steps}",
-          usedLevels.map((l) => l.name).join("、"),
-        ),
-      );
     body.push(
       (cnt === 1
         ? mode === "need"
@@ -2263,7 +2711,7 @@ const renderUserPrompt = (prompts, pid, vars) =>
 const renderSys = (prompts, pid, vars) =>
   prompts[pid].sys.replace(/\{\{(\w+)\}\}/g, (m, k) => vars[k] ?? "");
 /* ---------- 编排：按 Coze 连线执行一轮 ---------- */
-async function runTurn(ctx, ui) {
+async function executeTurn(ctx, ui) {
   const { cfg, prompts, llm, trace } = ctx;
   const T0 = performance.now();
   const step = (id, name, type, input, output, ms, note) =>
@@ -2286,15 +2734,15 @@ async function runTurn(ctx, ui) {
     step(id, name, "if", null, { 结果: res }, 0, res);
   const agg = (id, name, obj) => step(id, name, "agg", null, obj, 0);
   const TIER = {
-    P1: "fast",
     P1B: "fast",
+    PE: "fast",
     P3: "fast",
     P5: "strong",
     P6: "deep_low",
     P7: "strong",
   };
-  const P1ID = ctx.p1 === "B" ? "P1B" : "P1";
-  const model = async (id, name, pid, vars) => {
+  const P1ID = "P1B";
+  const model = async (id, name, pid, vars, redactTrace = pid === 'PE') => {
     const t = performance.now();
     const sys = renderSys(prompts, pid, vars);
     const user = prompts[pid].user.replace(
@@ -2306,7 +2754,12 @@ async function runTurn(ctx, ui) {
       err = null,
       timedOut = false;
     try {
-      if (ctx.enforceTimeout && limit) {
+      if (pid === 'PE') {
+        const ac = new AbortController(); let timer;
+        try {
+          out = await Promise.race([llm(id,pid,sys,user,TIER[pid],ac.signal), new Promise((_,reject)=>{timer=setTimeout(()=>{timedOut=true;ac.abort();reject(new Error('timeout'));},limit || 4000);})]);
+        } finally {clearTimeout(timer);}
+      } else if (ctx.enforceTimeout && limit) {
         const ac = new AbortController();
         const timer = setTimeout(() => {
           timedOut = true;
@@ -2332,10 +2785,10 @@ async function runTurn(ctx, ui) {
         prompt: pid,
         档位: TIER[pid],
         生产超时: limit ? limit + "ms" : "—",
-        变量: vars,
-        用户提示词: user,
+        变量: redactTrace ? {redacted:true} : vars,
+        用户提示词: redactTrace ? "[redacted]" : user,
       },
-      err ? { error: err.code || String(err.message || err) } : { output: out },
+      redactTrace ? {status:err ? "failed" : "returned",redacted:true} : err ? { error: err.code || String(err.message || err) } : { output: out },
       ms,
       err
         ? err.code === "timeout"
@@ -2352,11 +2805,17 @@ async function runTurn(ctx, ui) {
     state_json: "(用户变量)",
     user_input: ui,
   });
+  const entryState = JSON.parse(r2.state);
+  if (!ctx.stateJson || !parseLoose(ctx.stateJson).session_id) entryState.session_id = ctx.sessionId;
+  entryState.session_id ||= newSessionId();
+  entryState.turn_id = ctx.turnId;
+  r2.state = S(entryState);
   sel("N03", "入口分支", r2.branch === "STATIC" ? "其他" : r2.branch);
   if (r2.branch === "PREFILTER")
     trace[trace.length - 1].note =
       "PREFILTER（" + JSON.parse(r2.forced_und).prefilter + "）";
   let reply, newState;
+  const events = [];
   const finish = (id, r, s) => {
     agg("N33", "本轮输出", { 来源: id });
     reply = r;
@@ -2376,23 +2835,46 @@ async function runTurn(ctx, ui) {
     step("N26", "输出：阶段消息", "out", null, { text: cfg.profile_bubble });
     ctx.onBubble && ctx.onBubble(cfg.profile_bubble);
     agg("N28", "画像输入", { 来源: direct ? "N02" : "N11" });
-    const r29 = code("N29", "整理画像输入", () => N29(cfg, stateStr), {});
+    // Runtime evidence belongs to this generation only; never reuse an old gate.
+    const cleanState = JSON.parse(stateStr); delete cleanState.profile_evidence_runtime;
+    const r29 = code("N29", "整理画像输入", () => N29(cfg, S(cleanState)), {});
+    let vars = r29, stateForN32 = r29.state, evidenceOK = false;
+    if (cfg.profile_evidence?.enabled) {
+      try {
+        if (!['expect_ta','love_style','daily'].every(k => typeof cfg.profile_evidence.empty_copy?.[k] === 'string' && cfg.profile_evidence.empty_copy[k].trim())) throw new Error('missing_fixed_copy');
+        const input = ProfileEvidence.buildMapperInput(r29.state, {includeQ12Raw:cfg.profile_evidence.include_q12_raw !== false,q12MaxChars:320});
+        const raw = await model('N29PE','画像证据整理','PE',{evidence_input:JSON.stringify(input)});
+        const mapped = ProfileEvidence.validateMapper(input,raw);
+        const levels = ProfileEvidence.classifyEvidence(mapped);
+        vars = {...r29,...ProfileEvidence.makeProfileInputs(r29.state,mapped,levels,{p60_insight:r29.p60_insight})};
+        const state = JSON.parse(r29.state);
+        state.profile_evidence_runtime = {status:'ok',levels:vars.evidence_levels};
+        stateForN32 = S(state); evidenceOK = true;
+        step('N29G','证据校验','code',null,{status:'ok',levels:vars.evidence_levels},0);
+      } catch (_) {
+        vars = r29; stateForN32 = r29.state;
+        step('N29G','证据校验','code',null,{status:'fallback'},0);
+      }
+    }
     const [o30, o31] = await Promise.all([
-      model("N30", "② 关系画像·100%（沿用核心 / 期待 / 相处）", "P6", {
-        rel_facts: r29.rel_facts,
-        life_facts: r29.life_facts,
-        p60_insight: r29.p60_insight,
-      }),
+      model("N30", "② 关系画像·100%（期待 / 相处）", "P6", {
+        rel_facts: vars.rel_facts,
+        life_facts: vars.life_facts,
+        p60_insight: vars.p60_insight,
+      }, evidenceOK),
       model("N31", "③ 生活画像·100%（兴趣日常）", "P7", {
-        life_facts: r29.life_facts,
-      }),
+        life_facts: evidenceOK ? vars.p7_life_facts : r29.life_facts,
+      }, evidenceOK),
     ]);
     const r32 = code(
       "N32",
       "组装 100% 画像",
-      () => N32(cfg, r29.state, o30, o31),
+      () => N32(cfg, stateForN32, o30, o31),
       { out_rel: o30, out_life: o31 },
     );
+    const ready = BusinessEvents.prepareProfileReady(JSON.parse(r32.new_state));
+    if (ready.event) events.push(ready.event);
+    r32.new_state = S(ready.state);
     finish("N32", r32.reply, r32.new_state);
   };
   if (r2.branch === "STATIC") {
@@ -2426,6 +2908,7 @@ async function runTurn(ctx, ui) {
           agg("N37", "理解结果", { 来源: "N04" });
         } else {
           und = await model("N04B", "⑤ 回答理解（备用模型）", P1ID, vars);
+          if (!N38(und).ok) und = '{}';
           agg("N37", "理解结果", { 来源: "N04B" });
         }
       }
@@ -2437,6 +2920,11 @@ async function runTurn(ctx, ui) {
         {},
       );
       const r10 = code("N10", "标签映射", () => N10(cfg, r9.state), {});
+      if (JSON.parse(r9.state)._und.parse_ok) {
+        const committed = BusinessEvents.prepareFactsUpdated(JSON.parse(r2.state), JSON.parse(r10.state), {taskId:JSON.parse(r2.state).current?.task});
+        r10.state = S(committed.state);
+        if (committed.event) events.push(committed.event);
+      }
       const r11 = code(
         "N11",
         "任务路由与进度",
@@ -2542,5 +3030,50 @@ async function runTurn(ctx, ui) {
   step("N34", "变量赋值", "assign", null, { state_json: "← N33.new_state" });
   step("N35", "结束", "end", null, { reply });
   ctx.ms = Math.round(performance.now() - T0);
-  return { reply, newState };
+  return { reply, newState, events };
 }
+
+// A request id identifies one submitted turn, never merely the user's words.
+// Persist a bounded receipt so a refresh/retry cannot settle the same answer twice.
+function newSessionId() {
+  return typeof globalThis.crypto?.randomUUID === 'function' ? globalThis.crypto.randomUUID() :
+    `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+}
+const turnRequests = new Map();
+const contextSessions = new WeakMap();
+async function runTurn(ctx, ui) {
+  const prior = parseLoose(ctx.stateJson);
+  const sessionId = prior.session_id || ctx.sessionId || contextSessions.get(ctx) || newSessionId();
+  contextSessions.set(ctx, sessionId);
+  const turnId = ctx.turnId || newSessionId();
+  const key = JSON.stringify([sessionId, turnId]), input = String(ui || '');
+  const old = (prior.turn_receipts || []).find(r => r.turn_id === turnId);
+  if (old) {
+    if (old.input !== input) throw Error('turn_id_input_conflict');
+    const last = prior.last_turn_result;
+    return {reply:last?.turn_id === turnId ? last.reply : '', newState:ctx.stateJson,
+      events:last?.turn_id === turnId ? last.events || [] : [], duplicate:true};
+  }
+  if (turnRequests.has(key)) {
+    const request = turnRequests.get(key);
+    if (request.input !== input) throw Error('turn_id_input_conflict');
+    const result = await request.promise;
+    if ((prior.turn || 0) > (parseLoose(result.newState).turn || 0))
+      return {reply:'',newState:ctx.stateJson,events:[],duplicate:true};
+    return {...result,duplicate:true};
+  }
+  const execution = {...ctx, sessionId, turnId, trace:ctx.trace || []};
+  const promise = executeTurn(execution, ui).then(result => {
+    const state = JSON.parse(result.newState);
+    state.turn_receipts = [...(state.turn_receipts || []),{turn_id:turnId,input}].slice(-16);
+    state.last_turn_result = {turn_id:turnId,reply:result.reply,events:result.events};
+    result.newState = S(state);
+    ctx.ms = execution.ms;
+    return result;
+  });
+  turnRequests.set(key, {input,promise});
+  try { return await promise; }
+  catch (error) { turnRequests.delete(key); throw error; }
+  finally { if (turnRequests.size > 128) turnRequests.delete(turnRequests.keys().next().value); }
+}
+if (typeof window !== 'undefined') window.LoveMiEngine = {...window.LoveMiEngine, BusinessEvents};

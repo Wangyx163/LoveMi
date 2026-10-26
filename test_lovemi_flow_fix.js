@@ -40,10 +40,10 @@ async function run(){
     const after=JSON.parse(out.state);assert.equal(after._und.turn_signal,'user_question');
     assert.equal(after.facts.filter(f=>f.field==='Q12').length,0);
   });
-  await test('N09 保留普通 Q12 的开放补充',()=>{
+  await test('Q12原话保留在对话，不因模型未提取而自动造事实',()=>{
     const st=mainState('S40','Q12');st.turn=1;
     const out=api.N09(cfg,S(st),'遇到分歧的时候愿意好好沟通',S({answer_status:'answered',turn_signal:'normal',facts:[],ack:'知道啦～'}));
-    assert(JSON.parse(out.state).facts.some(f=>f.field==='Q12'&&f.sub==='supplement'));
+    assert(!JSON.parse(out.state).facts.some(f=>f.field==='Q12')); const routed=api.N11(cfg,out.state,'遇到分歧的时候愿意好好沟通','{}'); assert.equal(JSON.parse(routed.state).dialog.at(-1).a,'遇到分歧的时候愿意好好沟通');
   });
   await test('用户纯反问，不进入 REASK、FOLLOW_UP 或 SUPPLEMENT',()=>{
     const st=mainState('S60','REL');for(const id of ['NEED','CARD_L1','LIFE'])st.tasks[id].a=1;
@@ -103,7 +103,7 @@ async function run(){
     const routed=api.N11(cfg,S(st),'刚才生活还没聊完吧','{}');
     let after=JSON.parse(routed.state);assert.equal(after.dialog.length,1);
     const asked=api.N23(cfg,routed.state,cfg.tasks.LIFE.core);
-    assert(asked.reply.startsWith(st._und.ack));assert(!asked.reply.includes(st._und.reply_text));
+    assert(asked.reply.startsWith(st._und.reply_text));assert(!asked.reply.includes(st._und.ack));
     after=JSON.parse(asked.new_state);assert.equal(after.current.task,'LIFE');
     const understood=api.N09(cfg,S(after),'喜欢电影',S({answer_status:'answered',facts:[interest()],ack:'电影能聊的可不少～'}));
     const resumed=api.N11(cfg,understood.state,'喜欢电影','{}');
@@ -127,11 +127,11 @@ async function run(){
       assert.notEqual(result.action,'FOLLOW_UP');assert.equal(JSON.parse(result.state).used.S60.F,0);
     }
   });
-  await test('用户反问仍遵守出卡前必需信息门槛',()=>{
+  await test('纯反问不强制补齐信息，缺失项保持未知',()=>{
     if(!cfg.need_intake?.enabled)return;
     const st=mainState('S60','NEED');st._und={answer_status:'asks_back',turn_signal:'user_question',parse_ok:true,reply_text:'这些偏好能帮我了解你～'};
     const out=api.N11(cfg,S(st),'为什么问这个','{}');
-    assert.equal(out.action,'NEED_CLARIFY');assert.notEqual(out.route,'CARDS');
+    assert.equal(out.route,'CARDS');assert.equal(JSON.parse(out.state).need_intake.completed,true);
   });
   await test('Q12 不把无补充、拒答、反问或被拒事实兜底保存',()=>{
     const cases=[

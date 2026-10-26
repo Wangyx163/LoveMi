@@ -78,7 +78,7 @@ async function availablePort(){
   assert.equal(lastRequest.model,modelConfig.nodes.P1B.model);
   assert.equal(lastRequest.enable_thinking,false);
   assert.equal(lastRequest.thinking,undefined);
-  for(const pid of ['P1','P3','P5','P6','P7']) {
+  for(const pid of ['P3','P5','P6','P7','PE']) {
    const response=await request('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pid,sys:'test',user:'test'})});
    assert.equal(response.status,200);
    assert.equal(lastRequest.model,modelConfig.nodes[pid].model);
@@ -92,6 +92,9 @@ async function availablePort(){
    const denied=await request('/api/model',{method:'POST',headers:{Host:'lovemi.example',Origin:origin,'Content-Type':'application/json'},body:modelInput});assert.equal(denied.status,403,origin);
   }
   const missing=await request('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"pid":"UNKNOWN","sys":"a","user":"b"}'});assert.equal(missing.status,400);
+  for(const pid of ['P1','P6E']){
+   const retired=await request('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pid,sys:'test',user:'test'})});assert.equal(retired.status,400);
+  }
   const invalid=await request('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"pid":'});assert.equal(invalid.status,400);
   const oversized=await request('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pid:'P1B',sys:'你'.repeat(90000),user:'test'})});assert.equal(oversized.status,413);
   console.log('✓ 网关集成通过：首页与调试入口、前端静态资源、路径保护、六节点模型代理、部署同源校验');

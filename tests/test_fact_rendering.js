@@ -72,10 +72,10 @@ async function check(name, fn) {
       const result = api.N25(cfg, JSON.stringify(portraitState()), JSON.stringify({attitude, insufficient: !attitude}));
       const st = JSON.parse(result.new_state);
       const displayed = st.stage_card_60.attitude;
-      assert(displayed && !/[。.]/.test(displayed));
+      assert(!/[。.]/.test(displayed)); if(!attitude)assert.equal(displayed,'');
       if (attitude) assert.equal(displayed, originalInsight.replace('。', ''));
       assert(result.reply.includes(displayed));
-      assert.equal(assemblePortrait(st).profile.core, displayed);
+      assert(!('core' in assemblePortrait(st).profile));
     }
   });
 
@@ -178,12 +178,12 @@ async function check(name, fn) {
     const st = portraitState();
     st.stage_card_60 = {attitude: originalInsight, content_status: 'ok', fallback_group: ''};
     const {result, profile} = assemblePortrait(st);
-    assert.equal(profile.core, originalInsight);
+    assert(!('core' in profile));
     assert.notEqual(profile.core, rewrittenInsight);
-    assert.equal(profile.source.core, '60%');
+    assert(!('core' in profile.source));
     assert.equal(profile.content_status, 'ok', '正常继承阶段洞察不应使完整画像降为兜底');
     assert(!result.fallback_sections.includes('core'));
-    assert(result.reply.includes(originalInsight));
+    assert(!result.reply.includes(originalInsight));
     assert(!result.reply.includes(rewrittenInsight));
   });
 
@@ -192,10 +192,10 @@ async function check(name, fn) {
     const displayedFallback = '你的样子正在一点点清晰，剩下的，我们可以慢慢了解。';
     st.stage_card_60 = {attitude: displayedFallback, content_status: 'fallback', fallback_group: 'default'};
     const {result, profile} = assemblePortrait(st);
-    assert.equal(profile.core, displayedFallback);
-    assert.equal(profile.source.core, 'fallback');
-    assert.equal(profile.content_status, 'fallback');
-    assert(result.fallback_sections.includes('core'));
+    assert(!('core' in profile));
+    assert(!('core' in profile.source));
+    assert.equal(profile.content_status, st.facts.length ? 'ok' : 'no_evidence');
+    assert(!result.fallback_sections.includes('core'));
   });
 
   await check('画像输入仍只把成功的 P5 文案作为 p60_insight，兜底沿用由组装层负责', () => {
@@ -214,11 +214,11 @@ async function check(name, fn) {
         if (card) st.stage_card_60 = card;
         const {result, profile} = assemblePortrait(st);
         const configured = cfg.fallback_groups.default[withFacts ? 'core_some' : 'core'];
-        assert(configured.includes(profile.core), '应采用已有的中性或缺少信息兜底');
+        assert(!('core' in profile), '100%不新增核心');
         assert.notEqual(profile.core, rewrittenInsight, '无阶段文案也不能改用 P6 重写的 core');
-        assert.equal(profile.source.core, 'fallback');
-        assert.equal(profile.content_status, 'fallback');
-        assert(result.fallback_sections.includes('core'));
+        assert(!('core' in profile.source));
+        assert.equal(profile.content_status, st.facts.length ? 'ok' : 'no_evidence');
+        assert(!result.fallback_sections.includes('core'));
       }
     }
   });
@@ -257,13 +257,13 @@ async function check(name, fn) {
         const profile = JSON.parse(result.newState).profile;
         assert.deepEqual(calls.sort(), route === 'direct' ? ['P6', 'P7'] : ['P1B', 'P6', 'P7'], `${route}/${status} 仅调用所需理解与画像模型`);
         if (status === 'missing') {
-          assert(cfg.fallback_groups.default.core_some.includes(profile.core));
+          assert(!('core' in profile));
         } else {
-          assert.equal(profile.core, originalInsight, `${route}/${status} 应逐字沿用已展示文案`);
-          assert(result.reply.includes(originalInsight));
+          assert(!('core' in profile));
+          assert(!result.reply.includes(originalInsight));
         }
-        assert.equal(profile.source.core, status === 'ok' ? '60%' : 'fallback');
-        assert.equal(profile.content_status, status === 'ok' ? 'ok' : 'fallback');
+        assert(!('core' in profile.source));
+        assert.equal(profile.content_status,'ok');
         assert(!result.reply.includes(rewrittenInsight));
       }
     }

@@ -7,7 +7,7 @@ const http = require('node:http');
 
 const ROOT = __dirname;
 const MAX_BODY_BYTES = 256 * 1024;
-const ALLOWED_PIDS = new Set(['P1', 'P1B', 'P3', 'P5', 'P6', 'P7']);
+const ALLOWED_PIDS = new Set(['P1B', 'P3', 'P5', 'P6', 'P7', 'PE']);
 const envFile = path.join(ROOT, '.env');
 if (fs.existsSync(envFile)) {
   for (const line of fs.readFileSync(envFile, 'utf8').split(/\r?\n/)) {

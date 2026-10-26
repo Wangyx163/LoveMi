@@ -5,13 +5,6 @@
     "response_format_json": false
   },
   "nodes": {
-    "P1": {
-      "model": "qwen3.8-27b",
-      "temperature": 0.2,
-      "max_tokens": 1600,
-      "timeout_ms": 60000,
-      "enable_thinking": false
-    },
     "P1B": {
       "model": "qwen3.8-27b",
       "temperature": 0.25,
@@ -46,6 +39,13 @@
       "max_tokens": 8192,
       "timeout_ms": 180000,
       "enable_thinking": true
+    },
+    "PE": {
+      "model": "deepseek-v4.1-flash-1017",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "timeout_ms": 4000,
+      "enable_thinking": false
     }
   }
 }

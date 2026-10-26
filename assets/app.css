@@ -15,3 +15,5 @@
 @media(max-width:350px){.insight{font-size:20px;letter-spacing:0}}
 @media(max-height:650px){.mascot{height:113px;margin-top:5px}.progress-area{padding-top:10px}.mascot-image{height:100px;width:105px}.mascot-halo{top:14px;height:77px;width:77px}.mascot-name{bottom:5px}.conversation{gap:17px}.home-screen{padding-top:45px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+.profile-empty{position:relative;z-index:1;margin:12px 5px 18px;color:var(--muted,#777);font-size:13px;line-height:1.8;overflow-wrap:anywhere}
