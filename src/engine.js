@@ -1426,8 +1426,8 @@ function N38(raw) {
 }
 /* ---------- N05 ---------- */
 function N05(und) {
-  const d = parseLoose(und);
-  return { parse_ok: Object.keys(d).length > 0 };
+  // 主备模型与 N09 共享 N38 的结构校验标准。
+  return { parse_ok: N38(und).ok };
 }
 /* ---------- N09 ---------- */
 function N09(cfg, stateStr, ui, undTxt) {
@@ -1801,7 +1801,7 @@ function N11(cfg, stateStr, ui, hintStr) {
   } // 口头关怀一句，主流程照常推进
   if (und.parse_ok === false) {
     cur.fail = (cur.fail||0)+1;
-    return hold(cfg.model_fail_reply + "\n\n" + cur.text, "模型失败，不结算");
+    return hold("刚刚出了点小问题，可以再试一次吗？", "模型失败，不结算");
   }
   // Complete original Q/A lives beyond the 8-turn dialogue window. Reuse the
   // existing privacy/compliance boundaries; never sanitize by editing raw text.
@@ -2210,17 +2210,33 @@ function selectAck(cfg, st) {
   const und = st._und || {};
   if (!und.answer_status || und.parse_ok === false)
     return { text: "", care: false };
-  if (['unclear','off_topic','refused'].includes(und.answer_status) && (cfg.lazy_ack||[]).length && und.turn_signal==='normal') {
-    const list=cfg.lazy_ack;
-    return {text:replyParagraph(list[(st.turn||0)%list.length].replace('{about}',cfg.tasks[st.current?.task]?.about||'这个')),care:false};
-  }
+
+  // Restore 10.22: use the model's valid conversational ACK first.
   const ack = replyParagraph(und.ack);
   const valid =
     ack &&
     [...ack].length <= 25 &&
     !/[？?]/.test(ack) &&
-    !cfg.blocked.compliance.some((w) => ack.includes(w));
-  return { text: valid ? ack : "嗯，我们接着聊～", care: false };
+    !(cfg.blocked?.compliance || []).some(w => ack.includes(w));
+  if (valid) return { text: ack, care: false };
+
+  // Existing lazy ACK is only a fallback for unclear/off-topic/refused turns.
+  if (
+    ['unclear', 'off_topic', 'refused'].includes(und.answer_status) &&
+    und.turn_signal === 'normal' &&
+    (cfg.lazy_ack || []).length
+  ) {
+    const list = cfg.lazy_ack;
+    const fallback = list[(st.turn || 0) % list.length];
+    return {
+      text: replyParagraph(
+        fallback.replace('{about}', cfg.tasks[st.current?.task]?.about || '这个')
+      ),
+      care: false
+    };
+  }
+  // No mechanical ACK when the model has no usable one.
+  return { text: "", care: false };
 }
 function buildTurnReply(cfg, st) {
   // careLine 会消费状态，只选择一次，并将 care 标志传给输出节点。
@@ -2284,7 +2300,20 @@ function N23(cfg, stateStr, q) {
   // 已确认的烟酒单项模板自带承接，避免再拼一条模型 ack。
   const fixedQ7 = plan.task === 'Q7' && plan.qtype === 'FOLLOW_UP' &&
     Object.values(cfg.q7_followup || {}).includes(q);
-  let reply = replyParagraph(fixedQ7 && !selected.care ? '' : ack) + q;
+  // Q4 的完整固定脚本自带“生活里的你有点轮廓啦～”过渡句。
+  // 仅此情形抑制模型 ack；Q4 普通追问仍使用自然 ack。
+  // REL script contains the exact approved S60-to-relationship transition.
+  // Only remove the extra ACK when the full REL script is used.
+  // Q7 scripted smoke/drink follow-ups retain their existing suppression.
+  const transitionTask = cfg.tasks[plan.task];
+  const relScriptedTransition =
+    plan.task === 'REL' &&
+    ['ASK_NEXT', 'SUPPLEMENT'].includes(plan.action) &&
+    typeof transitionTask?.script === 'string' &&
+    q === replyQuestion(cfg, plan, transitionTask.script);
+  const prefixAck =
+    (fixedQ7 || relScriptedTransition) && !selected.care ? '' : ack;
+  let reply = replyParagraph(prefixAck) + q;
   reply += `\n\n— 画像进度 ${Math.floor((st.progress || 0) + 0.5)}%`;
   return { reply, new_state: S(st) };
 }
