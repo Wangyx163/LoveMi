@@ -1,0 +1,232 @@
+{
+  "version": "1.4",
+  "ui_height_bounds_cm": [
+    140,
+    220
+  ],
+  "default_height_tolerance_cm": 5,
+  "slider_left_percent": [
+    90,
+    70,
+    50,
+    30,
+    10
+  ],
+  "targets": [
+    {
+      "target": "lifestyle.home_pct",
+      "from": "Q2.home_out",
+      "subject": "自己",
+      "type": "slider",
+      "map": {
+        "明显偏宅家": 90,
+        "偏宅家": 70,
+        "均衡": 50,
+        "偏出门": 30,
+        "明显偏出门": 10
+      },
+      "unmapped": "leave_unset"
+    },
+    {
+      "target": "lifestyle.early_sleep_pct",
+      "from": "Q2.sleep",
+      "subject": "自己",
+      "type": "slider",
+      "map": {
+        "偏早睡": 70,
+        "偏晚睡": 30
+      },
+      "unmapped": "leave_unset"
+    },
+    {
+      "target": "lifestyle.alone_pct",
+      "from": "Q3.social",
+      "subject": "自己",
+      "type": "slider",
+      "map": {
+        "明显偏独处": 90,
+        "比较偏独处": 70,
+        "均衡": 50,
+        "比较偏社交": 30,
+        "明显偏社交": 10
+      },
+      "unmapped": "leave_unset"
+    },
+    {
+      "target": "lifestyle.consumption",
+      "from": "Q6.style",
+      "subject": "自己",
+      "type": "enum",
+      "map": {
+        "理智务实": "理智务实",
+        "享乐至上": "享乐至上",
+        "追求品质": "追求品质",
+        "随性随缘": "随性随缘"
+      }
+    },
+    {
+      "target": "lifestyle.smoke",
+      "from": "Q7.smoke",
+      "subject": "自己",
+      "type": "enum",
+      "map": {
+        "不吸": "不吸烟",
+        "经常": "经常吸烟",
+        "偶尔": "偶尔吸烟"
+      }
+    },
+    {
+      "target": "lifestyle.drink",
+      "from": "Q7.drink",
+      "subject": "自己",
+      "type": "special",
+      "map": {
+        "不喝": "滴酒不沾",
+        "偶尔": "小酌怡情",
+        "经常": null
+      },
+      "self_named_only": "酒蒙子"
+    },
+    {
+      "target": "lifestyle.pet_attitude",
+      "from": [
+        "Q5.has_pet",
+        "Q5.animal_like",
+        "Q5.pet_type"
+      ],
+      "subject": "自己",
+      "type": "special",
+      "ui_values": [
+        "已经养啦",
+        "非常想养",
+        "完全不想养"
+      ]
+    },
+    {
+      "target": "preference.seek_gender",
+      "from": "NEED.gender",
+      "subject": "TA",
+      "type": "enum",
+      "map": {
+        "男生": "男生",
+        "女生": "女生",
+        "不限": "不限"
+      },
+      "default_source": "registration.seek"
+    },
+    {
+      "target": "preference.ideal_height",
+      "from": "NEED.height",
+      "subject": "TA",
+      "type": "range",
+      "bounds_cm": [
+        140,
+        220
+      ],
+      "tolerance_cm": 5
+    },
+    {
+      "target": "relationship.need",
+      "from": "Q11.need",
+      "subject": "关系",
+      "type": "enum",
+      "map": {
+        "情感慰藉": "情感慰藉",
+        "灵魂共鸣": "灵魂共鸣",
+        "现实助力": "现实助力",
+        "感官吸引": "感官吸引"
+      }
+    },
+    {
+      "target": "relationship.pace",
+      "from": "Q4.pace",
+      "subject": "自己",
+      "type": "step",
+      "map": {
+        "非常慢热": 1,
+        "偏慢热": 2,
+        "自然发展": 3,
+        "偏主动": 4,
+        "非常主动": 5
+      }
+    },
+    {
+      "target": "relationship.flaw_handling",
+      "from": "Q8.flaw_handling",
+      "subject": "关系",
+      "type": "enum",
+      "map": {
+        "立即劝退": "立即劝退",
+        "持续评估": "持续评估",
+        "无限包容": "无限包容"
+      }
+    },
+    {
+      "target": "relationship.balance",
+      "from": "Q9.balance",
+      "subject": "关系",
+      "type": "step",
+      "map": {
+        "明显偏事业学业": 1,
+        "比较偏事业学业": 2,
+        "视情况而定": 3,
+        "比较偏感情": 4,
+        "明显偏感情": 5
+      }
+    },
+    {
+      "target": "relationship.past_openness",
+      "from": "Q10.openness",
+      "subject": "关系",
+      "type": "enum",
+      "map": {
+        "避而不谈": "避而不谈",
+        "点到为止": "点到为止",
+        "开诚布公": "开诚布公"
+      }
+    }
+  ],
+  "facts_extensions": {
+    "Q2": {
+      "subs": {
+        "home_out": {
+          "type": "enum",
+          "values": [
+            "明显偏宅家",
+            "偏宅家",
+            "均衡",
+            "偏出门",
+            "明显偏出门"
+          ]
+        }
+      }
+    },
+    "Q8": {
+      "subs": {
+        "flaw_handling": {
+          "type": "enum",
+          "values": [
+            "立即劝退",
+            "持续评估",
+            "无限包容"
+          ],
+          "subjects": [
+            "关系"
+          ]
+        }
+      }
+    },
+    "NEED": {
+      "subs": {
+        "gender": {
+          "type": "enum",
+          "values": [
+            "男生",
+            "女生",
+            "不限"
+          ]
+        }
+      }
+    }
+  }
+}

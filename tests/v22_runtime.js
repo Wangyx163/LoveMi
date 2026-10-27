@@ -40,7 +40,8 @@ const ctx=(s,llm,turnId)=>({cfg,prompts,stateJson:S(s),llm,turnId,trace:[]});
  });
  await test('direct generation keeps actual progress and a single ready event',async()=>{
   const s=api.newState(cfg);s.stage='AWAIT_60';s.progress=65;s.stage_card_60={attitude:'唯一洞察',content_status:'ok'};
-  const a=await api.runTurn(ctx(s,async()=>S({expect_ta:'',love_style:'',daily:''}),'direct'),cfg.buttons.p60[1]);
+  s.facts=[{...fact('NEED','traits','TA','坦诚'),ver:1,active:true,status:'已确认'}];
+  const a=await api.runTurn(ctx(s,async()=>S({expect_ta:'你希望对方坦诚',love_style:'',daily:''}),'direct'),cfg.buttons.p60[1]);
   assert.equal(a.events.length,1);assert.equal(a.events[0].flow_progress,65);assert.equal(a.events[0].profile_version,1);
   const b=await api.runTurn(ctx(JSON.parse(a.newState),()=>{throw Error('save called model');},'save'),cfg.buttons.p100[0]);
   assert.equal(b.events.length,0);assert.equal(JSON.parse(b.newState).profile_version,1);
@@ -48,7 +49,7 @@ const ctx=(s,llm,turnId)=>({cfg,prompts,stateJson:S(s),llm,turnId,trace:[]});
  await test('both invalid JSON profile outputs leave explicit empty error states',async()=>{
   const s=api.newState(cfg);s.stage='AWAIT_60';s.progress=60;s.facts=[{...fact('NEED','traits','TA','坦诚'),ver:1,active:true,status:'已确认'}];
   const r=await api.runTurn(ctx(s,async()=> 'null','null-profile'),cfg.buttons.p60[1]);
-  assert.equal(r.events[0].section_state.expect_ta,'generation_error');assert.equal(r.events[0].profile.expect_ta,'');
+  assert.equal(r.events.length,0);const after=JSON.parse(r.newState);assert.equal(after.stage,'PROFILE_FAILED');assert.equal(after.profile.section_state.expect_ta,'generation_error');assert.equal(after.profile.expect_ta,'');
  });
  await test('nested wrong types and unknown enums reject the whole proposed update',()=>{
   for(const extra of [{reference_task:{}},{ack_worthy:'yes'},{turn_signal:'unknown'},{card_interest:{target:[]}},{followup:{worth:true}},{facts:[{...fact('NEED','traits','TA','坦诚'),strength:'maybe'}]},{facts:[{...fact('NEED','traits','TA','坦诚'),priority:'high'}]}])assert.equal(api.N38(S({answer_status:'answered',...extra})).ok,false);

@@ -78,7 +78,7 @@ async function availablePort(){
   assert.equal(lastRequest.model,modelConfig.nodes.P1B.model);
   assert.equal(lastRequest.enable_thinking,false);
   assert.equal(lastRequest.thinking,undefined);
-  for(const pid of ['P3','P5','P6','P7','PE']) {
+  for(const pid of ['P3','P5','P6','P7','PE','PC']) {
    const response=await request('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pid,sys:'test',user:'test'})});
    assert.equal(response.status,200);
    assert.equal(lastRequest.model,modelConfig.nodes[pid].model);

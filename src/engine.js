@@ -375,8 +375,14 @@ function prepareProfileReady(input, options = {}) {
   // Repeated N32/refresh at the same facts revision is the same profile delivery,
   // even if a retried stochastic model happens to generate different prose.
   if (meta.last_profile_facts_revision === state.facts_revision && revision(state.profile_version)) return {state, event: null};
+  const wb=state.profile_writeback;
+  if(wb?.required && (wb.status!=='complete'||wb.facts_revision!==state.facts_revision))throw Error('business_writeback_not_ready');
   state.profile_version = revision(state.profile_version) + 1;
   const statuses = Object.fromEntries(SECTION_KEYS.map(key => [key, sectionState(state.profile, key)]));
+  if(wb?.required && (Object.values(statuses).includes('generation_error') ||
+    !SECTION_KEYS.some(key=>statuses[key]==='generated'&&text(state.profile[key]).trim()) ||
+    (['daily','love_style'].some(key=>statuses[key]==='generated'&&text(state.profile[key]).trim()) && !text(state.profile_content?.story_text).trim())))
+    throw Error('business_profile_generation_incomplete');
   const profile = Object.fromEntries(SECTION_KEYS.map(key => [key,
     statuses[key] === 'generated' ? text(state.profile[key]) : ''
   ]));
@@ -390,6 +396,17 @@ function prepareProfileReady(input, options = {}) {
     current_facts: currentSnapshot(state, options),
     current_tag_ids: currentTagIds(state), current_need_tag_ids: uniq(state.need_tags || []).sort(), status: 'ready',
   };
+  if(wb?.required){
+    event.profile_field_updates=clone(state.profile_field_updates || {});
+    event.profile_content=clone(state.profile_content || {});
+    event.write_modes={profile_field_updates:'patch',profile_content:'write_present_only'};
+    if(Array.isArray(state.interest_ids_for_merge)){
+      event.interest_ids=clone(state.interest_ids_for_merge);
+      event.write_modes.interest_ids='merge';
+    }
+    event.writeback_version='1.4';
+    event.writeback_diagnostics=clone(wb.diagnostics || []);
+  }
   state.business_events = {...meta, last_profile_facts_revision: state.facts_revision, last_profile_event_key: idempotencyKey};
   return {state, event};
 }
@@ -443,6 +460,237 @@ module.exports = {prepareFactsUpdated, prepareProfileReady, currentSnapshot, cur
 
 return module.exports; })();
 /* BUSINESS_EVENTS_END */
+/* PROFILE_CONTENT_START (generated from src/profile_content_composer.js) */
+const ProfileContentComposer = (() => { const module = {exports:{}};
+'use strict';
+// One model output, two independent results. Original Q/A never comes from a model.
+const allowedTasks = new Set(['LIFE','SUP1','SUP2','SUP3','SUP4']);
+const text = value => typeof value === 'string' ? value : '';
+const isRecord = value => value && typeof value === 'object' && !Array.isArray(value);
+function candidatesFromSession(records = []) {
+  if (!Array.isArray(records)) return [];
+  const counts = new Map();
+  for (const row of records) if(row) counts.set(row.turn_id,(counts.get(row.turn_id)||0)+1);
+  return records.filter(row => row && typeof row.turn_id === 'string' && row.turn_id && counts.get(row.turn_id)===1 &&
+    allowedTasks.has(row.task_id) && ['answered','partial'].includes(row.answer_status) &&
+    text(row.question).trim() && text(row.raw_answer).trim());
+}
+function resolveSelectedTopic(candidates, selectedId) {
+  if (typeof selectedId !== 'string') return null;
+  const row = candidatesFromSession(candidates).find(q => q.turn_id === selectedId);
+  return row ? {turn_id:row.turn_id,question:row.question,answer:row.raw_answer} : null;
+}
+function prepareContentInput(state) {
+  const p = state.profile || {};
+  const source = key => !p.section_state?.[key] || p.section_state[key]==='generated' ? text(p[key]) : '';
+  return {
+    daily:source('daily'), love_style:source('love_style'),
+    supporting_facts:(state.facts || []).filter(f => f?.active===true && f.status==='已确认' &&
+      ['自己','关系'].includes(f.subject) && !['NEED','CARD'].includes(f.field) &&
+      !(state.notes || []).some(n => n.active && n.field===f.field && n.sub===f.sub && n.subject===f.subject))
+      .map(f => ({field:f.field,sub:f.sub,subject:f.subject,value:f.value,evidence:f.evidence,
+        polarity:f.polarity || '肯定',condition:f.condition || '',ver:f.ver})),
+    qa_candidates:candidatesFromSession(state.topic_candidates).map(q => ({...q})),
+  };
+}
+const shouldCompose = input => !!(input.daily.trim() || input.love_style.trim() || input.qa_candidates.length);
+function parseAndValidate(raw, input, options = {}) {
+  let obj;
+  try {obj = typeof raw==='string' ? JSON.parse(raw) : raw;} catch (_) {}
+  const result = {story_text:'',selected_turn_id:null,diagnostics:[]};
+  if (!isRecord(obj)) {result.diagnostics.push('invalid_json_object');return result;}
+  if(Object.keys(obj).some(k => !['story_text','selected_turn_id'].includes(k))) result.diagnostics.push('unexpected_keys_ignored');
+  const story = text(obj.story_text).trim();
+  if(typeof obj.story_text !== 'string') result.diagnostics.push('invalid_story_type');
+  else if(story && (!input.supporting_facts.length || !(input.daily.trim()||input.love_style.trim()))) result.diagnostics.push('story_without_evidence');
+  else if([...story].length > (options.maxStoryChars || 160)) result.diagnostics.push('story_too_long');
+  else if(story && options.isAllowed && !options.isAllowed(story)) result.diagnostics.push('story_blocked');
+  else result.story_text=story;
+  if(obj.selected_turn_id !== null && obj.selected_turn_id !== undefined) {
+    if(typeof obj.selected_turn_id!=='string') result.diagnostics.push('invalid_topic_id_type');
+    else if(resolveSelectedTopic(input.qa_candidates,obj.selected_turn_id)) result.selected_turn_id=obj.selected_turn_id;
+    else result.diagnostics.push('unknown_topic_id');
+  }
+  return result;
+}
+function expectTaForWriteback(state) {
+  const p=state.profile || {};
+  if(p.section_state?.expect_ta && p.section_state.expect_ta!=='generated') return '';
+  return text(p.expect_ta).replaceAll('你','我');
+}
+module.exports={candidatesFromSession,resolveSelectedTopic,prepareContentInput,shouldCompose,parseAndValidate,expectTaForWriteback};
+
+return module.exports; })();
+/* PROFILE_CONTENT_END */
+/* PROFILE_MAPPER_START (generated from src/profile_mapper.js) */
+const ProfileFieldMapper = (() => { const module = {exports:{}};
+'use strict';
+/* Registration-only mapping. Pure code, never writes a database or infers missing facts. */
+const TARGET_SEPARATOR = '.';
+const norm = x => String(x == null ? '' : x).trim();
+const inRange = (x,min,max)=>Math.max(min,Math.min(max,x));
+const isValidFact = f => !!f && f.active === true && f.status === '已确认' &&
+  (f.polarity || '肯定') === '肯定' && !norm(f.condition) &&
+  !!norm(f.field) && !!norm(f.sub) && typeof f.value === 'string' && !!norm(f.value);
+const quoteOf = f => norm(f.evidence);
+const order = f => Number.isFinite(Number(f.ver)) ? Number(f.ver) : Number(f.turn)||0;
+
+function selectedFact(facts,field,sub,subject){
+  const matches=facts.filter(f=>isValidFact(f)&&f.field===field&&f.sub===sub&&f.subject===subject);
+  if(!matches.length)return {status:'missing'};
+  const values=[...new Set(matches.map(f=>norm(f.value)))];
+  if(values.length===1)return {status:'matched',fact:matches.sort((a,b)=>order(b)-order(a))[0]};
+  // N09 should have invalidated a corrected value. Never silently last-write-wins otherwise.
+  const corrected=matches.filter(f=>f.op==='correct').sort((a,b)=>order(b)-order(a));
+  if(corrected.length && order(corrected[0])>Math.max(...matches.filter(f=>f!==corrected[0]).map(order)))
+    return {status:'matched',fact:corrected[0]};
+  return {status:'conflict',reason:`${field}.${sub} has multiple active values`,evidence:matches.map(f=>f.value)};
+}
+function evidence(f){return {fact_version:f.ver??null,field:`${f.field}.${f.sub}`,subject:f.subject,quote:quoteOf(f)};}
+function canonicalInterest(raw,aliases){
+  const q=norm(raw).toLowerCase();
+  if(!q)return null;
+  for(const row of aliases)if([row.name,...(row.aliases||[])].some(s=>norm(s).toLowerCase()===q))return row.id;
+  return null;
+}
+function mapInterests(facts,taxonomy,interestAliases){
+  if(!Array.isArray(facts)||!Array.isArray(taxonomy)||!taxonomy.length)throw Error('invalid_interest_taxonomy');
+  const validIDs=new Set(taxonomy.map(t=>Number(t.id)));
+  const data=interestAliases?.interest_aliases||interestAliases;
+  if(validIDs.size!==taxonomy.length||[...validIDs].some(id=>!Number.isSafeInteger(id)||id<=0)||!Array.isArray(data)||!data.length)throw Error('invalid_interest_dictionary');
+  const meanings=new Map();
+  for(const row of data){
+    if(!validIDs.has(row.id)||typeof row.name!=='string'||!Array.isArray(row.aliases))throw Error('invalid_interest_alias');
+    for(const name of [row.name,...row.aliases]){
+      if(typeof name!=='string'||!name.trim())throw Error('invalid_interest_alias');
+      const key=norm(name).toLowerCase();
+      if(meanings.has(key)&&meanings.get(key)!==row.id)throw Error('ambiguous_interest_alias');
+      meanings.set(key,row.id);
+    }
+  }
+  const ids=new Set(),unmapped=[],trace=[];
+  for(const f of facts.filter(f=>isValidFact(f)&&f.subject==='自己'&&f.field==='Q1'&&f.sub==='items')){
+    if(f.polarity==='否定')continue;
+    const v=norm(f.value);
+    // Try entire standardized phrase before splitting. This preserves aliases such as 奶茶和甜品.
+    const whole=canonicalInterest(v,data);
+    const tokens=whole?[v]:v.split(/[、，,；;\/]|(?:和)|(?:以及)/).map(x=>x.trim()).filter(Boolean);
+    for(const token of tokens){const id=canonicalInterest(token,data);
+      if(id!==null&&validIDs.has(Number(id))){ids.add(Number(id));trace.push({id:Number(id),source:evidence(f)});}
+      else unmapped.push({word:token,source_fact_version:f.ver??null});
+    }
+  }
+  return {ids:[...ids].sort((a,b)=>a-b),unmapped,trace};
+}
+function parseHeight(f,registeredHeight,bounds,tolerance){
+  let s=norm(f.value).replace(/厘米|公分|ＣＭ|cm/gi,'').replace(/\s+/g,'');
+  const [low,high]=bounds;
+  if(/^(不限|无所谓|没要求|都可以)$/.test(s))return {min_cm:low,max_cm:high,kind:'unlimited',strength:f.strength||'偏好',tolerance_cm:0};
+  let m=s.match(/^(?:比我|比本人|比自己)(高|矮)(\d{1,2})(?:左右|上下)?$/);
+  if(m){
+    if(!Number.isFinite(registeredHeight)||registeredHeight<low||registeredHeight>high)return {pending:'missing_registered_height',raw:f.value};
+    const center=registeredHeight+(m[1]==='高'?1:-1)*Number(m[2]);
+    if(center<low||center>high)return {pending:'out_of_bounds',raw:f.value};
+    const delta=tolerance;
+    return {min_cm:inRange(center-delta,low,high),max_cm:inRange(center+delta,low,high),kind:'relative_target',strength:f.strength||'偏好',tolerance_cm:delta,raw:f.value};
+  }
+  m=s.match(/^(\d{3})(?:-|~|～|至|到)(\d{3})$/);
+  if(m){const min=Number(m[1]),max=Number(m[2]);if(min>max||min<low||max>high)return {pending:'invalid_range',raw:f.value};
+    return {min_cm:min,max_cm:max,kind:'explicit_range',strength:f.strength||'偏好',tolerance_cm:0,raw:f.value};}
+  m=s.match(/^(?:(?:至少|不低于|不得低于|不能低于)(\d{3})|(\d{3})(?:以上|起|及以上))$/);
+  if(m){const x=Number(m[1]||m[2]);if(x<low||x>high)return {pending:'out_of_bounds',raw:f.value};return {min_cm:x,max_cm:high,kind:'min',strength:f.strength||'偏好',tolerance_cm:0,raw:f.value};}
+  m=s.match(/^(?:(?:最多|不高于|不能高于)(\d{3})|(\d{3})(?:以下|以内|及以下))$/);
+  if(m){const x=Number(m[1]||m[2]);if(x<low||x>high)return {pending:'out_of_bounds',raw:f.value};return {min_cm:low,max_cm:x,kind:'max',strength:f.strength||'偏好',tolerance_cm:0,raw:f.value};}
+  m=s.match(/^(\d{3})(?:左右|上下)?$/);
+  if(m){const x=Number(m[1]);if(x<low||x>high)return {pending:'out_of_bounds',raw:f.value};
+    const delta=tolerance;
+    return {min_cm:inRange(x-delta,low,high),max_cm:inRange(x+delta,low,high),kind:delta?'around':'exact',strength:f.strength||'偏好',tolerance_cm:delta,raw:f.value};}
+  return {pending:'unparsed_height',raw:f.value};
+}
+function isSelfNamedAlcohol(f){
+  const s=quoteOf(f).replace(/\s+/g,'');
+  if(/[?？"“”「」]|以前|曾经|如果|可能|不|没|别/.test(s))return false;
+  return /(?:^|[，。；;！!])(?:我|本人)(?:就是|是|算是|自认是|自称是)(?:个|一个|妥妥的)?酒蒙子/.test(s);
+}
+function mapPet(facts,q5_answers=[]){
+  const own=facts.filter(f=>isValidFact(f)&&f.field==='Q5'&&f.subject==='自己');
+  const has=selectedFact(own,'Q5','has_pet','自己');
+  if(has.status==='matched'&&has.fact.value==='正在养')return {status:'matched',value:'已经养啦',source:evidence(has.fact)};
+  if(has.status==='conflict')return has;
+  // Explicit desire must be present in P1B evidence, not inferred from '喜欢动物' or '没有养'.
+  // Old raw answers cannot undo a newer confirmed correction. Unknown/conflicting
+  // intent stays unknown; a third person's plans never become the user's plans.
+  const latestTurn=has.status==='matched'?Number(has.fact.turn)||0:0;
+  const quotes=[...new Set([...own.filter(f=>(Number(f.turn)||0)>=latestTurn).map(quoteOf),...q5_answers.filter(q=>q&&typeof q.text==='string'&&
+    (Number(q.turn)||0)>=latestTurn).map(q=>q.text)])].filter(Boolean);
+  const safe=quotes.filter(q=>!/[?？"“”「」]|(?:如果|要是|可能|或许|以前|曾经|过去|原来|他|她|室友|朋友|父母|爸妈|别人|对方)/.test(q));
+  const clauses=safe.flatMap(q=>q.split(/[，。；;！!]/)).map(q=>q.trim())
+    .filter(q=>q&&!/(?:他|她|它|室友|朋友|父母|爸妈|别人|对方|帮|替|照顾|代养)/.test(q));
+  // Bare '养' inherits the Q5 pet question, while an explicitly different object
+  // (养花/养生 etc.) must never be accepted just because the verb matches.
+  const petObject=/(?:想养|打算养|计划养|就养|再养)(?=$|宠物|小?猫|小?狗|一只|一条|几只|几条)/;
+  const want=clauses.filter(q=>/(?:非常|特别|很|超级|一直|真的|一定).{0,3}想养|(?:打算|计划)养|等.{1,8}(?:就|再)养/.test(q)&&petObject.test(q)&&!/不|没|别/.test(q));
+  const never=clauses.filter(q=>/^(?:我|本人)?(?:完全不想养|绝对不养|一点都不想养|绝不会养)(?:宠物|任何动物|动物)?(?:了|啦|啊|呢)?$/.test(q));
+  const current=clauses.filter(q=>/^(?:我)?(?:现在|目前|正在)(?:正)?养(?:着|了|有)?(?:一只|一条|几只|几条)?(?:小?猫|小?狗|宠物)/.test(q));
+  if(current.length&&has.status==='matched'&&has.fact.value==='没有养')return {status:'conflict',reason:'conflicting_current_pet'};
+  if(current.length)return {status:'matched',value:'已经养啦',source:{quotes:current}};
+  if(want.length&&clauses.some(q=>/不想养|不打算养|没打算养|不计划养/.test(q)))return {status:'conflict',reason:'conflicting_pet_desire'};
+  if(want.length&&never.length)return {status:'conflict',reason:'conflicting_pet_desire'};
+  if(want.length)return {status:'matched',value:'非常想养',source:{quotes:want}};
+  if(never.length)return {status:'matched',value:'完全不想养',source:{quotes:never}};
+  return {status:'unknown',reason:'no_explicit_pet_intention'};
+}
+function mapProfile({facts=[],registration={},config,taxonomy=[],interestAliases={interest_aliases:[]},q5_answers=[],notes=[]}){
+  if(!config||!Array.isArray(config.targets))throw new Error('profile_mapping_config_missing');
+  const conflicts=notes.filter(n=>n.active);
+  facts=facts.filter(f=>!conflicts.some(n=>n.field===f.field&&n.sub===f.sub&&n.subject===f.subject));
+  const updates={},sources={},skipped=[];
+  const emit=(key,value,source)=>{updates[key]=value;sources[key]=source;};
+  // Existing registered preference remains available, but is not written unless explicitly changed.
+  for(const t of config.targets){
+    const source=Array.isArray(t.from)?null:t.from;
+    if(t.type==='special'&&t.target==='lifestyle.pet_attitude'){
+      const p=conflicts.some(n=>n.field==='Q5')?{status:'conflict',reason:'unresolved_pet_conflict'}:mapPet(facts,q5_answers);
+      if(p.status==='matched')emit(t.target,p.value,p.source);
+      else skipped.push({target:t.target,status:p.status,reason:p.reason});continue;
+    }
+    const [field,sub]=source.split(TARGET_SEPARATOR);
+    const sel=selectedFact(facts,field,sub,t.subject);
+    if(sel.status!=='matched'){
+      skipped.push({target:t.target,status:sel.status,reason:sel.reason||'no_valid_fact'});continue;
+    }
+    const f=sel.fact,raw=norm(f.value);
+    if(t.type==='range'){
+      const h=parseHeight(f,registration.height_cm==null?NaN:Number(registration.height_cm),t.bounds_cm,t.tolerance_cm);
+      if(h.pending)skipped.push({target:t.target,status:'unmapped',reason:h.pending,raw:h.raw});
+      else emit(t.target,h,evidence(f));continue;
+    }
+    if(t.type==='special'&&t.target==='lifestyle.drink'){
+      if(raw==='经常'){
+        if(isSelfNamedAlcohol(f))emit(t.target,'酒蒙子',evidence(f));
+        else skipped.push({target:t.target,status:'unmapped',reason:'frequent_drinking_not_self_named_酒蒙子'});
+      }else if(Object.prototype.hasOwnProperty.call(t.map,raw)&&t.map[raw]!==null)emit(t.target,t.map[raw],evidence(f));
+      else skipped.push({target:t.target,status:'unmapped',reason:'unrecognized_drink'});
+      continue;
+    }
+    if(t.map&&Object.prototype.hasOwnProperty.call(t.map,raw))emit(t.target,t.map[raw],evidence(f));
+    else skipped.push({target:t.target,status:'unmapped',reason:'non_equivalent_or_illegal_value',raw});
+  }
+  let interest;
+  try {interest={status:'mapped',...mapInterests(facts,taxonomy,interestAliases)};}
+  catch (_) {interest={status:'error',reason:'interest_mapping_failed'};}
+  // Include known existing interests for a useful snapshot. The host must still
+  // apply an atomic union against its current database, not replace from this snapshot.
+  if(interest.status==='mapped'){
+    const existing=Array.isArray(registration.interest_ids)?registration.interest_ids:[];
+    interest.ids=[...new Set([...existing.filter(id=>Number.isSafeInteger(id)&&id>0),...interest.ids])].sort((a,b)=>a-b);
+  }
+  return {updates,sources,skipped,interest,registration_unchanged:{seek:registration.seek??null,height_cm:registration.height_cm??null}};
+}
+module.exports={mapProfile,mapInterests,parseHeight,mapPet,isSelfNamedAlcohol,selectedFact};
+
+return module.exports; })();
+/* PROFILE_MAPPER_END */
 /* ===== LoveMi Coze Demo 引擎：与 Coze 代码节点逐一对应（JS 版） ===== */
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const S = (v) => JSON.stringify(v);
@@ -499,6 +747,8 @@ function newState(cfg) {
     fv: 0,
     tags: { 60: [], 100: [] },
     dialog: [],
+    topic_candidates: [],
+    q5_answers: [],
     history: [],
     cards: [],
     rec: {},
@@ -952,6 +1202,15 @@ function N02(cfg, stateJson, ui) {
       st.stage = "PROFILE_GEN";
       st.from_direct = true;
     }
+  } else if (st.stage === "PROFILE_FAILED") {
+    if(ui === '继续补充'){
+      delete st.profile_generation; delete st.profile_writeback;
+      st.stage='S40'; st.tasks.Q12=newTaskState();
+      st.plan={action:'ASK_NEXT',task:'Q12',qtype:'MAIN'};
+      branch='CONTINUE_40';contQ=cfg.tasks.Q12.script;
+    }else if(ui === '重试生成画像'){
+      st.stage='PROFILE_GEN';branch='PROFILE';
+    }else reply='可以点击重试生成画像，或继续补充一点信息。';
   } else if (st.stage === "PROFILE_READY") {
     if (ui.includes("保存")) {
       st.saved = true;
@@ -1199,6 +1458,7 @@ function N09(cfg, stateStr, ui, undTxt) {
     if (!fields[fid]) reason = "字段不存在";
     else if (!fields[fid].subs[sub]) reason = "子项不存在";
     else if (!fields[fid].subjects.includes(subj)) reason = "对象不合法";
+    else if (fields[fid].subs[sub].subjects && !fields[fid].subs[sub].subjects.includes(subj)) reason = "子项对象不合法";
     else if (!ev || norm(ev).length < 1 || !nui.includes(norm(ev)))
       reason = "证据不是用户原话";
     else if (PII.test(String(val)) || PII.test(ev))
@@ -1542,6 +1802,23 @@ function N11(cfg, stateStr, ui, hintStr) {
   if (und.parse_ok === false) {
     cur.fail = (cur.fail||0)+1;
     return hold(cfg.model_fail_reply + "\n\n" + cur.text, "模型失败，不结算");
+  }
+  // Complete original Q/A lives beyond the 8-turn dialogue window. Reuse the
+  // existing privacy/compliance boundaries; never sanitize by editing raw text.
+  const rawAnswer=String(ui), turnId=st.turn_id || `turn_${st.turn}`;
+  if(['answered','partial'].includes(status) && !PII.test(rawAnswer) &&
+    !cfg.blocked.compliance.some(w=>rawAnswer.includes(w))){
+    if(['LIFE','SUP1','SUP2','SUP3','SUP4'].includes(tid)){
+      st.topic_candidates ||= [];
+      if(!st.topic_candidates.some(q=>q.turn_id===turnId))st.topic_candidates.push({
+        turn_id:turnId,task_id:tid,qtype,question:String(cur.text||''),raw_answer:rawAnswer,
+        answer_status:status,turn:st.turn,
+      });
+    }
+    if(tid==='Q5'){
+      st.q5_answers ||= [];
+      if(!st.q5_answers.some(q=>q.turn_id===turnId))st.q5_answers.push({turn_id:turnId,text:rawAnswer,turn:st.turn});
+    }
   }
   if (status === "asks_back" && !suppressExtra && !(cfg.no_reask_tasks||[]).includes(tid)) {
     if (!cur.hold) {
@@ -2325,6 +2602,63 @@ function N32(cfg, stateStr, outRel, outLife) {
 }
 
 /* ---------- N36 召回 + 硬筛 + 排序 + 出卡 ---------- */
+// A ready event is created only after portrait and required story generation succeed.
+// Generation retries and delivery retries are deliberately separate operations.
+async function completeProfileWriteback(cfg, input, registration, compose) {
+  const st=JSON.parse(JSON.stringify(input));
+  if(!cfg.profile_writeback?.enabled)return st;
+  if(st.profile_writeback?.status==='complete' && st.profile_writeback.facts_revision===st.facts_revision)return st;
+  st.profile_writeback={required:true,status:'pending',version:'1.4',facts_revision:st.facts_revision||0};
+  const diagnostics=[];
+  const fail=reason=>{
+    st.stage='PROFILE_FAILED';
+    st.profile_writeback={...st.profile_writeback,status:'failed',reason,diagnostics};
+    return st;
+  };
+  const profile=st.profile || {}, keys=['expect_ta','daily','love_style'];
+  if(st.profile_generation?.pending_nodes?.length || keys.some(k=>profile.section_state?.[k]==='generation_error'))return fail('portrait_generation_failed');
+  if(!keys.some(k=>typeof profile[k]==='string'&&profile[k].trim()&&
+    (!profile.section_state?.[k]||profile.section_state[k]==='generated')))return fail('no_evidence');
+  st.profile_field_updates={};st.profile_content={};
+  delete st.interest_ids_for_replace;
+  delete st.interest_ids_for_merge;
+  st.write_modes={profile_field_updates:'patch',profile_content:'write_present_only'};
+  try{
+    const bundle=cfg.profile_mapping || {};
+    const mapped=ProfileFieldMapper.mapProfile({facts:st.facts,notes:st.notes,q5_answers:st.q5_answers,
+      registration:registration || {},config:bundle.config,taxonomy:bundle.taxonomy,interestAliases:bundle.interestAliases});
+    st.profile_field_updates=mapped.updates;
+    st.profile_mapping_diagnostics={skipped:mapped.skipped,interest_status:mapped.interest.status,
+      interest_unmapped:mapped.interest.unmapped || []};
+    if(mapped.interest.status==='mapped'){
+      st.interest_ids_for_merge=mapped.interest.ids;st.write_modes.interest_ids='merge';
+    }else diagnostics.push('interest_mapping_failed');
+  }catch(_){diagnostics.push('profile_mapping_failed');}
+  const ideal=ProfileContentComposer.expectTaForWriteback(st);
+  if(ideal.trim())st.profile_content.ideal_partner_description=ideal;
+  const contentInput=ProfileContentComposer.prepareContentInput(st);
+  const supplement=profileSupplement(st);
+  if(supplement)contentInput.supporting_facts.push({field:'Q12',sub:'supplement',subject:'未分类',value:supplement,evidence:supplement});
+  contentInput.qa_candidates=contentInput.qa_candidates.filter(q=>![q.question,q.raw_answer].some(t=>
+    PII.test(t)||cfg.blocked.compliance.some(w=>t.includes(w))));
+  if(ProfileContentComposer.shouldCompose(contentInput)){
+    let raw='';
+    try{raw=await compose(contentInput);}catch(_){diagnostics.push('composer_failed');}
+    const validated=ProfileContentComposer.parseAndValidate(raw,contentInput,{
+      maxStoryChars:cfg.profile_writeback.composer_max_chars,
+      isAllowed:t=>!PII.test(t)&&![...cfg.blocked.compliance,...cfg.blocked.no_label].some(w=>t.includes(w)),
+    });
+    diagnostics.push(...validated.diagnostics);
+    if(validated.diagnostics.some(d=>d!=='unexpected_keys_ignored') || diagnostics.includes('composer_failed') ||
+      ((contentInput.daily.trim()||contentInput.love_style.trim()) && !validated.story_text))return fail('composer_generation_failed');
+    if(validated.story_text)st.profile_content.story_text=validated.story_text;
+    const topic=ProfileContentComposer.resolveSelectedTopic(st.topic_candidates,validated.selected_turn_id);
+    if(topic)st.profile_content.topic=topic;
+  }
+  st.profile_writeback={...st.profile_writeback,status:'complete',diagnostics};
+  st.stage='PROFILE_READY';
+  return st;
+}
 const EDU = { 本科: 1, 硕士: 2, 博士: 3 };
 const loadLibrary = (cfg) => cfg.pool; // 口子 1：真实环境查库（候选人 + 预先跑好的标签）
 const tagObj = (cfg, tid) => {
@@ -2736,13 +3070,14 @@ async function executeTurn(ctx, ui) {
   const TIER = {
     P1B: "fast",
     PE: "fast",
+    PC: "fast",
     P3: "fast",
     P5: "strong",
     P6: "deep_low",
     P7: "strong",
   };
   const P1ID = "P1B";
-  const model = async (id, name, pid, vars, redactTrace = pid === 'PE') => {
+  const model = async (id, name, pid, vars, redactTrace = ['PE','PC'].includes(pid)) => {
     const t = performance.now();
     const sys = renderSys(prompts, pid, vars);
     const user = prompts[pid].user.replace(
@@ -2754,7 +3089,7 @@ async function executeTurn(ctx, ui) {
       err = null,
       timedOut = false;
     try {
-      if (pid === 'PE') {
+      if (pid === 'PE' || pid === 'PC') {
         const ac = new AbortController(); let timer;
         try {
           out = await Promise.race([llm(id,pid,sys,user,TIER[pid],ac.signal), new Promise((_,reject)=>{timer=setTimeout(()=>{timedOut=true;ac.abort();reject(new Error('timeout'));},limit || 4000);})]);
@@ -2835,11 +3170,19 @@ async function executeTurn(ctx, ui) {
     step("N26", "输出：阶段消息", "out", null, { text: cfg.profile_bubble });
     ctx.onBubble && ctx.onBubble(cfg.profile_bubble);
     agg("N28", "画像输入", { 来源: direct ? "N02" : "N11" });
-    // Runtime evidence belongs to this generation only; never reuse an old gate.
+    // Retry only failed generation nodes at the same input, retaining successful prose.
     const cleanState = JSON.parse(stateStr); delete cleanState.profile_evidence_runtime;
     const r29 = code("N29", "整理画像输入", () => N29(cfg, S(cleanState)), {});
+    const fingerprint=S([r29.rel_facts,r29.life_facts,r29.p60_insight,profileSupplement(cleanState)]);
+    const previous=cleanState.profile_generation;
+    const cached=previous?.fingerprint===fingerprint && previous.facts_revision===cleanState.facts_revision ? previous : null;
     let vars = r29, stateForN32 = r29.state, evidenceOK = false;
-    if (cfg.profile_evidence?.enabled) {
+    if(cached){
+      vars={...r29,...cached.vars};evidenceOK=cached.evidence_ok;
+      const restored=JSON.parse(r29.state);
+      if(cached.evidence_runtime)restored.profile_evidence_runtime=cached.evidence_runtime;
+      stateForN32=S(restored);
+    }else if (cfg.profile_evidence?.enabled) {
       try {
         if (!['expect_ta','love_style','daily'].every(k => typeof cfg.profile_evidence.empty_copy?.[k] === 'string' && cfg.profile_evidence.empty_copy[k].trim())) throw new Error('missing_fixed_copy');
         const input = ProfileEvidence.buildMapperInput(r29.state, {includeQ12Raw:cfg.profile_evidence.include_q12_raw !== false,q12MaxChars:320});
@@ -2857,12 +3200,12 @@ async function executeTurn(ctx, ui) {
       }
     }
     const [o30, o31] = await Promise.all([
-      model("N30", "② 关系画像·100%（期待 / 相处）", "P6", {
+      cached?.outputs?.P6 ?? model("N30", "② 关系画像·100%（期待 / 相处）", "P6", {
         rel_facts: vars.rel_facts,
         life_facts: vars.life_facts,
         p60_insight: vars.p60_insight,
       }, evidenceOK),
-      model("N31", "③ 生活画像·100%（兴趣日常）", "P7", {
+      cached?.outputs?.P7 ?? model("N31", "③ 生活画像·100%（兴趣日常）", "P7", {
         life_facts: evidenceOK ? vars.p7_life_facts : r29.life_facts,
       }, evidenceOK),
     ]);
@@ -2872,7 +3215,28 @@ async function executeTurn(ctx, ui) {
       () => N32(cfg, stateForN32, o30, o31),
       { out_rel: o30, out_life: o31 },
     );
-    const ready = BusinessEvents.prepareProfileReady(JSON.parse(r32.new_state));
+    const assembled=JSON.parse(r32.new_state);
+    const validOutput=(raw,keys)=>{
+      let obj;try{obj=JSON.parse(raw);}catch(_){return false;}
+      return obj&&typeof obj==='object'&&!Array.isArray(obj)&&keys.every(k=>typeof obj[k]==='string'&&assembled.profile.section_state[k]!=='generation_error');
+    };
+    const outputs={};
+    if(validOutput(o30,['expect_ta','love_style']))outputs.P6=o30;
+    if(validOutput(o31,['daily']))outputs.P7=o31;
+    assembled.profile_generation={fingerprint,facts_revision:assembled.facts_revision,
+      vars:{rel_facts:vars.rel_facts,life_facts:vars.life_facts,p60_insight:vars.p60_insight,p7_life_facts:vars.p7_life_facts},
+      evidence_ok:evidenceOK,evidence_runtime:assembled.profile_evidence_runtime,
+      outputs,pending_nodes:['P6','P7'].filter(pid=>!(pid in outputs))};
+    const completed=await completeProfileWriteback(cfg,assembled,ctx.registrationProfile,
+      input=>model('N32PC','最终资料：故事压缩与话题选择','PC',{content_input:S(input)}));
+    if(completed.stage==='PROFILE_FAILED'){
+      const message=completed.profile_writeback.reason==='no_evidence'
+        ? '现在的信息还不足以生成画像，可以再补充一点你的想法。'
+        : '画像还没有生成完成，已保留你的回答，可以点击重试。';
+      finish('N32RETRY',message,S(completed));return;
+    }
+    delete completed.profile_generation;
+    const ready = BusinessEvents.prepareProfileReady(completed);
     if (ready.event) events.push(ready.event);
     r32.new_state = S(ready.state);
     finish("N32", r32.reply, r32.new_state);
@@ -3076,4 +3440,4 @@ async function runTurn(ctx, ui) {
   catch (error) { turnRequests.delete(key); throw error; }
   finally { if (turnRequests.size > 128) turnRequests.delete(turnRequests.keys().next().value); }
 }
-if (typeof window !== 'undefined') window.LoveMiEngine = {...window.LoveMiEngine, BusinessEvents};
+if (typeof window !== 'undefined') window.LoveMiEngine = {...window.LoveMiEngine, BusinessEvents, ProfileFieldMapper, ProfileContentComposer};

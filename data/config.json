@@ -169,6 +169,14 @@
         },
         "lifestyle": {
           "type": "open"
+        },
+        "gender": {
+          "type": "enum",
+          "values": [
+            "男生",
+            "女生",
+            "不限"
+          ]
         }
       }
     },
@@ -226,6 +234,16 @@
             "适中",
             "比较忙碌",
             "不固定"
+          ]
+        },
+        "home_out": {
+          "type": "enum",
+          "values": [
+            "明显偏宅家",
+            "偏宅家",
+            "均衡",
+            "偏出门",
+            "明显偏出门"
           ]
         }
       }
@@ -349,6 +367,17 @@
         },
         "boundary": {
           "type": "open"
+        },
+        "flaw_handling": {
+          "type": "enum",
+          "values": [
+            "立即劝退",
+            "持续评估",
+            "无限包容"
+          ],
+          "subjects": [
+            "关系"
+          ]
         }
       }
     },
@@ -2262,7 +2291,8 @@
     "P5": 8000,
     "P6": 20000,
     "P7": 15000,
-    "PE": 4000
+    "PE": 4000,
+    "PC": 15000
   },
   "version": "v2.2-20261026",
   "buttons": {
@@ -2642,5 +2672,1365 @@
   },
   "profile_send": "",
   "profile_send_enabled": false,
-  "profile_empty_message": "关于你的生活、期待和相处方式，我们暂时还没有了解到太多。这次先不替你猜，之后再慢慢完善。"
+  "profile_empty_message": "关于你的生活、期待和相处方式，我们暂时还没有了解到太多。这次先不替你猜，之后再慢慢完善。",
+  "profile_writeback": {
+    "enabled": true,
+    "version": "1.4",
+    "composer_max_chars": 160
+  },
+  "profile_mapping": {
+    "config": {
+      "version": "1.4",
+      "ui_height_bounds_cm": [
+        140,
+        220
+      ],
+      "default_height_tolerance_cm": 5,
+      "slider_left_percent": [
+        90,
+        70,
+        50,
+        30,
+        10
+      ],
+      "targets": [
+        {
+          "target": "lifestyle.home_pct",
+          "from": "Q2.home_out",
+          "subject": "自己",
+          "type": "slider",
+          "map": {
+            "明显偏宅家": 90,
+            "偏宅家": 70,
+            "均衡": 50,
+            "偏出门": 30,
+            "明显偏出门": 10
+          },
+          "unmapped": "leave_unset"
+        },
+        {
+          "target": "lifestyle.early_sleep_pct",
+          "from": "Q2.sleep",
+          "subject": "自己",
+          "type": "slider",
+          "map": {
+            "偏早睡": 70,
+            "偏晚睡": 30
+          },
+          "unmapped": "leave_unset"
+        },
+        {
+          "target": "lifestyle.alone_pct",
+          "from": "Q3.social",
+          "subject": "自己",
+          "type": "slider",
+          "map": {
+            "明显偏独处": 90,
+            "比较偏独处": 70,
+            "均衡": 50,
+            "比较偏社交": 30,
+            "明显偏社交": 10
+          },
+          "unmapped": "leave_unset"
+        },
+        {
+          "target": "lifestyle.consumption",
+          "from": "Q6.style",
+          "subject": "自己",
+          "type": "enum",
+          "map": {
+            "理智务实": "理智务实",
+            "享乐至上": "享乐至上",
+            "追求品质": "追求品质",
+            "随性随缘": "随性随缘"
+          }
+        },
+        {
+          "target": "lifestyle.smoke",
+          "from": "Q7.smoke",
+          "subject": "自己",
+          "type": "enum",
+          "map": {
+            "不吸": "不吸烟",
+            "经常": "经常吸烟",
+            "偶尔": "偶尔吸烟"
+          }
+        },
+        {
+          "target": "lifestyle.drink",
+          "from": "Q7.drink",
+          "subject": "自己",
+          "type": "special",
+          "map": {
+            "不喝": "滴酒不沾",
+            "偶尔": "小酌怡情",
+            "经常": null
+          },
+          "self_named_only": "酒蒙子"
+        },
+        {
+          "target": "lifestyle.pet_attitude",
+          "from": [
+            "Q5.has_pet",
+            "Q5.animal_like",
+            "Q5.pet_type"
+          ],
+          "subject": "自己",
+          "type": "special",
+          "ui_values": [
+            "已经养啦",
+            "非常想养",
+            "完全不想养"
+          ]
+        },
+        {
+          "target": "preference.seek_gender",
+          "from": "NEED.gender",
+          "subject": "TA",
+          "type": "enum",
+          "map": {
+            "男生": "男生",
+            "女生": "女生",
+            "不限": "不限"
+          },
+          "default_source": "registration.seek"
+        },
+        {
+          "target": "preference.ideal_height",
+          "from": "NEED.height",
+          "subject": "TA",
+          "type": "range",
+          "bounds_cm": [
+            140,
+            220
+          ],
+          "tolerance_cm": 5
+        },
+        {
+          "target": "relationship.need",
+          "from": "Q11.need",
+          "subject": "关系",
+          "type": "enum",
+          "map": {
+            "情感慰藉": "情感慰藉",
+            "灵魂共鸣": "灵魂共鸣",
+            "现实助力": "现实助力",
+            "感官吸引": "感官吸引"
+          }
+        },
+        {
+          "target": "relationship.pace",
+          "from": "Q4.pace",
+          "subject": "自己",
+          "type": "step",
+          "map": {
+            "非常慢热": 1,
+            "偏慢热": 2,
+            "自然发展": 3,
+            "偏主动": 4,
+            "非常主动": 5
+          }
+        },
+        {
+          "target": "relationship.flaw_handling",
+          "from": "Q8.flaw_handling",
+          "subject": "关系",
+          "type": "enum",
+          "map": {
+            "立即劝退": "立即劝退",
+            "持续评估": "持续评估",
+            "无限包容": "无限包容"
+          }
+        },
+        {
+          "target": "relationship.balance",
+          "from": "Q9.balance",
+          "subject": "关系",
+          "type": "step",
+          "map": {
+            "明显偏事业学业": 1,
+            "比较偏事业学业": 2,
+            "视情况而定": 3,
+            "比较偏感情": 4,
+            "明显偏感情": 5
+          }
+        },
+        {
+          "target": "relationship.past_openness",
+          "from": "Q10.openness",
+          "subject": "关系",
+          "type": "enum",
+          "map": {
+            "避而不谈": "避而不谈",
+            "点到为止": "点到为止",
+            "开诚布公": "开诚布公"
+          }
+        }
+      ],
+      "facts_extensions": {
+        "Q2": {
+          "subs": {
+            "home_out": {
+              "type": "enum",
+              "values": [
+                "明显偏宅家",
+                "偏宅家",
+                "均衡",
+                "偏出门",
+                "明显偏出门"
+              ]
+            }
+          }
+        },
+        "Q8": {
+          "subs": {
+            "flaw_handling": {
+              "type": "enum",
+              "values": [
+                "立即劝退",
+                "持续评估",
+                "无限包容"
+              ],
+              "subjects": [
+                "关系"
+              ]
+            }
+          }
+        },
+        "NEED": {
+          "subs": {
+            "gender": {
+              "type": "enum",
+              "values": [
+                "男生",
+                "女生",
+                "不限"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "taxonomy": [
+      {
+        "id": 1,
+        "name": "咖啡探店"
+      },
+      {
+        "id": 2,
+        "name": "奶茶甜品"
+      },
+      {
+        "id": 3,
+        "name": "火锅"
+      },
+      {
+        "id": 4,
+        "name": "烧烤"
+      },
+      {
+        "id": 5,
+        "name": "日料"
+      },
+      {
+        "id": 6,
+        "name": "韩餐"
+      },
+      {
+        "id": 7,
+        "name": "小酒馆"
+      },
+      {
+        "id": 8,
+        "name": "夜市小吃"
+      },
+      {
+        "id": 9,
+        "name": "烘焙"
+      },
+      {
+        "id": 10,
+        "name": "家常菜"
+      },
+      {
+        "id": 11,
+        "name": "看电影"
+      },
+      {
+        "id": 12,
+        "name": "追剧"
+      },
+      {
+        "id": 13,
+        "name": "综艺"
+      },
+      {
+        "id": 14,
+        "name": "脱口秀"
+      },
+      {
+        "id": 15,
+        "name": "K歌"
+      },
+      {
+        "id": 16,
+        "name": "桌游"
+      },
+      {
+        "id": 17,
+        "name": "剧本杀"
+      },
+      {
+        "id": 18,
+        "name": "密室逃脱"
+      },
+      {
+        "id": 19,
+        "name": "电玩城"
+      },
+      {
+        "id": 20,
+        "name": "Livehouse"
+      },
+      {
+        "id": 21,
+        "name": "散步"
+      },
+      {
+        "id": 22,
+        "name": "跑步"
+      },
+      {
+        "id": 23,
+        "name": "骑行"
+      },
+      {
+        "id": 24,
+        "name": "羽毛球"
+      },
+      {
+        "id": 25,
+        "name": "篮球"
+      },
+      {
+        "id": 26,
+        "name": "游泳"
+      },
+      {
+        "id": 27,
+        "name": "瑜伽"
+      },
+      {
+        "id": 28,
+        "name": "健身"
+      },
+      {
+        "id": 29,
+        "name": "爬山"
+      },
+      {
+        "id": 30,
+        "name": "露营"
+      },
+      {
+        "id": 31,
+        "name": "周末短途"
+      },
+      {
+        "id": 32,
+        "name": "城市漫步"
+      },
+      {
+        "id": 33,
+        "name": "海边度假"
+      },
+      {
+        "id": 34,
+        "name": "古镇旅行"
+      },
+      {
+        "id": 35,
+        "name": "自驾游"
+      },
+      {
+        "id": 36,
+        "name": "民宿体验"
+      },
+      {
+        "id": 37,
+        "name": "逛夜景"
+      },
+      {
+        "id": 38,
+        "name": "拍照打卡"
+      },
+      {
+        "id": 39,
+        "name": "公园野餐"
+      },
+      {
+        "id": 40,
+        "name": "旅行攻略"
+      },
+      {
+        "id": 41,
+        "name": "逛展"
+      },
+      {
+        "id": 42,
+        "name": "摄影"
+      },
+      {
+        "id": 43,
+        "name": "画画"
+      },
+      {
+        "id": 44,
+        "name": "手账"
+      },
+      {
+        "id": 45,
+        "name": "书法"
+      },
+      {
+        "id": 46,
+        "name": "陶艺"
+      },
+      {
+        "id": 47,
+        "name": "插花"
+      },
+      {
+        "id": 48,
+        "name": "看话剧"
+      },
+      {
+        "id": 49,
+        "name": "博物馆"
+      },
+      {
+        "id": 50,
+        "name": "设计美学"
+      },
+      {
+        "id": 51,
+        "name": "流行音乐"
+      },
+      {
+        "id": 52,
+        "name": "民谣"
+      },
+      {
+        "id": 53,
+        "name": "摇滚"
+      },
+      {
+        "id": 54,
+        "name": "古典音乐"
+      },
+      {
+        "id": 55,
+        "name": "音乐节"
+      },
+      {
+        "id": 56,
+        "name": "动漫"
+      },
+      {
+        "id": 57,
+        "name": "纪录片"
+      },
+      {
+        "id": 58,
+        "name": "喜剧电影"
+      },
+      {
+        "id": 59,
+        "name": "悬疑电影"
+      },
+      {
+        "id": 60,
+        "name": "爱情电影"
+      },
+      {
+        "id": 61,
+        "name": "做饭"
+      },
+      {
+        "id": 62,
+        "name": "收纳整理"
+      },
+      {
+        "id": 63,
+        "name": "家居布置"
+      },
+      {
+        "id": 64,
+        "name": "养花"
+      },
+      {
+        "id": 65,
+        "name": "香薰"
+      },
+      {
+        "id": 66,
+        "name": "早睡早起"
+      },
+      {
+        "id": 67,
+        "name": "慢生活"
+      },
+      {
+        "id": 68,
+        "name": "逛超市"
+      },
+      {
+        "id": 69,
+        "name": "做手工"
+      },
+      {
+        "id": 70,
+        "name": "泡茶"
+      },
+      {
+        "id": 71,
+        "name": "猫咪"
+      },
+      {
+        "id": 72,
+        "name": "狗狗"
+      },
+      {
+        "id": 73,
+        "name": "宠物摄影"
+      },
+      {
+        "id": 74,
+        "name": "云吸猫"
+      },
+      {
+        "id": 75,
+        "name": "遛狗"
+      },
+      {
+        "id": 76,
+        "name": "水族观赏"
+      },
+      {
+        "id": 77,
+        "name": "观鸟"
+      },
+      {
+        "id": 78,
+        "name": "植物养护"
+      },
+      {
+        "id": 79,
+        "name": "户外看风景"
+      },
+      {
+        "id": 80,
+        "name": "动物园"
+      },
+      {
+        "id": 81,
+        "name": "手游"
+      },
+      {
+        "id": 82,
+        "name": "主机游戏"
+      },
+      {
+        "id": 83,
+        "name": "PC游戏"
+      },
+      {
+        "id": 84,
+        "name": "休闲小游戏"
+      },
+      {
+        "id": 85,
+        "name": "棋牌"
+      },
+      {
+        "id": 86,
+        "name": "电竞比赛"
+      },
+      {
+        "id": 87,
+        "name": "数码产品"
+      },
+      {
+        "id": 88,
+        "name": "AI工具"
+      },
+      {
+        "id": 89,
+        "name": "拍照修图"
+      },
+      {
+        "id": 90,
+        "name": "视频剪辑"
+      },
+      {
+        "id": 91,
+        "name": "朋友聚会"
+      },
+      {
+        "id": 92,
+        "name": "饭后散步"
+      },
+      {
+        "id": 93,
+        "name": "一起探店"
+      },
+      {
+        "id": 94,
+        "name": "周末看展"
+      },
+      {
+        "id": 95,
+        "name": "一起运动"
+      },
+      {
+        "id": 96,
+        "name": "拼饭"
+      },
+      {
+        "id": 97,
+        "name": "逛市集"
+      },
+      {
+        "id": 98,
+        "name": "公益活动"
+      },
+      {
+        "id": 99,
+        "name": "读书会"
+      },
+      {
+        "id": 100,
+        "name": "兴趣小组"
+      }
+    ],
+    "interestAliases": {
+      "version": "profile-interest-v1",
+      "source": "V3 runtime interest_aliases only; NOT home first push rules",
+      "interest_aliases": [
+        {
+          "id": 1,
+          "name": "咖啡探店",
+          "aliases": [
+            "探咖啡店",
+            "咖啡馆探店"
+          ]
+        },
+        {
+          "id": 2,
+          "name": "奶茶甜品",
+          "aliases": [
+            "奶茶和甜品"
+          ]
+        },
+        {
+          "id": 3,
+          "name": "火锅",
+          "aliases": [
+            "吃火锅",
+            "涮火锅"
+          ]
+        },
+        {
+          "id": 4,
+          "name": "烧烤",
+          "aliases": [
+            "吃烧烤",
+            "撸串"
+          ]
+        },
+        {
+          "id": 5,
+          "name": "日料",
+          "aliases": [
+            "吃日料"
+          ]
+        },
+        {
+          "id": 6,
+          "name": "韩餐",
+          "aliases": [
+            "吃韩餐"
+          ]
+        },
+        {
+          "id": 7,
+          "name": "小酒馆",
+          "aliases": [
+            "逛小酒馆"
+          ]
+        },
+        {
+          "id": 8,
+          "name": "夜市小吃",
+          "aliases": [
+            "逛夜市",
+            "夜市扫街"
+          ]
+        },
+        {
+          "id": 9,
+          "name": "烘焙",
+          "aliases": [
+            "做烘焙",
+            "烤点心"
+          ]
+        },
+        {
+          "id": 10,
+          "name": "家常菜",
+          "aliases": [
+            "家常饭菜"
+          ]
+        },
+        {
+          "id": 11,
+          "name": "看电影",
+          "aliases": [
+            "观影",
+            "去电影院看电影"
+          ]
+        },
+        {
+          "id": 12,
+          "name": "追剧",
+          "aliases": [
+            "追电视剧"
+          ]
+        },
+        {
+          "id": 13,
+          "name": "综艺",
+          "aliases": [
+            "看综艺"
+          ]
+        },
+        {
+          "id": 14,
+          "name": "脱口秀",
+          "aliases": []
+        },
+        {
+          "id": 15,
+          "name": "K歌",
+          "aliases": [
+            "唱K",
+            "去KTV唱歌"
+          ]
+        },
+        {
+          "id": 16,
+          "name": "桌游",
+          "aliases": [
+            "玩桌游"
+          ]
+        },
+        {
+          "id": 17,
+          "name": "剧本杀",
+          "aliases": [
+            "玩剧本杀"
+          ]
+        },
+        {
+          "id": 18,
+          "name": "密室逃脱",
+          "aliases": [
+            "玩密室"
+          ]
+        },
+        {
+          "id": 19,
+          "name": "电玩城",
+          "aliases": [
+            "玩街机",
+            "玩电玩城"
+          ]
+        },
+        {
+          "id": 20,
+          "name": "Livehouse",
+          "aliases": [
+            "去livehouse",
+            "现场音乐酒吧"
+          ]
+        },
+        {
+          "id": 21,
+          "name": "散步",
+          "aliases": [
+            "散散步",
+            "遛弯"
+          ]
+        },
+        {
+          "id": 22,
+          "name": "跑步",
+          "aliases": [
+            "慢跑",
+            "跑跑步"
+          ]
+        },
+        {
+          "id": 23,
+          "name": "骑行",
+          "aliases": [
+            "骑自行车",
+            "骑车",
+            "单车骑行"
+          ]
+        },
+        {
+          "id": 24,
+          "name": "羽毛球",
+          "aliases": [
+            "打羽毛球",
+            "羽球"
+          ]
+        },
+        {
+          "id": 25,
+          "name": "篮球",
+          "aliases": [
+            "打篮球"
+          ]
+        },
+        {
+          "id": 26,
+          "name": "游泳",
+          "aliases": [
+            "去游泳"
+          ]
+        },
+        {
+          "id": 27,
+          "name": "瑜伽",
+          "aliases": [
+            "练瑜伽"
+          ]
+        },
+        {
+          "id": 28,
+          "name": "健身",
+          "aliases": [
+            "撸铁",
+            "去健身房健身"
+          ]
+        },
+        {
+          "id": 29,
+          "name": "爬山",
+          "aliases": [
+            "登山",
+            "爬爬山"
+          ]
+        },
+        {
+          "id": 30,
+          "name": "露营",
+          "aliases": [
+            "野营"
+          ]
+        },
+        {
+          "id": 31,
+          "name": "周末短途",
+          "aliases": [
+            "周边短途游",
+            "周末短途游"
+          ]
+        },
+        {
+          "id": 32,
+          "name": "城市漫步",
+          "aliases": [
+            "citywalk",
+            "城市散步"
+          ]
+        },
+        {
+          "id": 33,
+          "name": "海边度假",
+          "aliases": [
+            "去海边度假"
+          ]
+        },
+        {
+          "id": 34,
+          "name": "古镇旅行",
+          "aliases": [
+            "逛古镇"
+          ]
+        },
+        {
+          "id": 35,
+          "name": "自驾游",
+          "aliases": [
+            "开车自驾游"
+          ]
+        },
+        {
+          "id": 36,
+          "name": "民宿体验",
+          "aliases": [
+            "住民宿"
+          ]
+        },
+        {
+          "id": 37,
+          "name": "逛夜景",
+          "aliases": []
+        },
+        {
+          "id": 38,
+          "name": "拍照打卡",
+          "aliases": []
+        },
+        {
+          "id": 39,
+          "name": "公园野餐",
+          "aliases": [
+            "野餐"
+          ]
+        },
+        {
+          "id": 40,
+          "name": "旅行攻略",
+          "aliases": [
+            "做旅行攻略"
+          ]
+        },
+        {
+          "id": 41,
+          "name": "逛展",
+          "aliases": [
+            "看展",
+            "看展览"
+          ]
+        },
+        {
+          "id": 42,
+          "name": "摄影",
+          "aliases": [
+            "摄影创作"
+          ]
+        },
+        {
+          "id": 43,
+          "name": "画画",
+          "aliases": [
+            "绘画"
+          ]
+        },
+        {
+          "id": 44,
+          "name": "手账",
+          "aliases": [
+            "做手账"
+          ]
+        },
+        {
+          "id": 45,
+          "name": "书法",
+          "aliases": [
+            "练书法"
+          ]
+        },
+        {
+          "id": 46,
+          "name": "陶艺",
+          "aliases": [
+            "玩陶艺",
+            "捏陶土"
+          ]
+        },
+        {
+          "id": 47,
+          "name": "插花",
+          "aliases": [
+            "插花艺"
+          ]
+        },
+        {
+          "id": 48,
+          "name": "看话剧",
+          "aliases": [
+            "去剧院看话剧"
+          ]
+        },
+        {
+          "id": 49,
+          "name": "博物馆",
+          "aliases": [
+            "逛博物馆"
+          ]
+        },
+        {
+          "id": 50,
+          "name": "设计美学",
+          "aliases": [
+            "美学设计"
+          ]
+        },
+        {
+          "id": 51,
+          "name": "流行音乐",
+          "aliases": [
+            "流行歌"
+          ]
+        },
+        {
+          "id": 52,
+          "name": "民谣",
+          "aliases": [
+            "听民谣"
+          ]
+        },
+        {
+          "id": 53,
+          "name": "摇滚",
+          "aliases": [
+            "听摇滚"
+          ]
+        },
+        {
+          "id": 54,
+          "name": "古典音乐",
+          "aliases": [
+            "听古典乐"
+          ]
+        },
+        {
+          "id": 55,
+          "name": "音乐节",
+          "aliases": [
+            "去音乐节"
+          ]
+        },
+        {
+          "id": 56,
+          "name": "动漫",
+          "aliases": [
+            "追番"
+          ]
+        },
+        {
+          "id": 57,
+          "name": "纪录片",
+          "aliases": [
+            "看纪录片"
+          ]
+        },
+        {
+          "id": 58,
+          "name": "喜剧电影",
+          "aliases": [
+            "看喜剧片"
+          ]
+        },
+        {
+          "id": 59,
+          "name": "悬疑电影",
+          "aliases": [
+            "看悬疑片"
+          ]
+        },
+        {
+          "id": 60,
+          "name": "爱情电影",
+          "aliases": [
+            "看爱情电影"
+          ]
+        },
+        {
+          "id": 61,
+          "name": "做饭",
+          "aliases": [
+            "下厨",
+            "自己做饭"
+          ]
+        },
+        {
+          "id": 62,
+          "name": "收纳整理",
+          "aliases": [
+            "收拾整理"
+          ]
+        },
+        {
+          "id": 63,
+          "name": "家居布置",
+          "aliases": [
+            "布置家居"
+          ]
+        },
+        {
+          "id": 64,
+          "name": "养花",
+          "aliases": [
+            "种花",
+            "养植物"
+          ]
+        },
+        {
+          "id": 65,
+          "name": "香薰",
+          "aliases": []
+        },
+        {
+          "id": 66,
+          "name": "早睡早起",
+          "aliases": [
+            "早起早睡"
+          ]
+        },
+        {
+          "id": 67,
+          "name": "慢生活",
+          "aliases": [
+            "慢节奏生活"
+          ]
+        },
+        {
+          "id": 68,
+          "name": "逛超市",
+          "aliases": [
+            "逛逛超市"
+          ]
+        },
+        {
+          "id": 69,
+          "name": "做手工",
+          "aliases": [
+            "做手工"
+          ]
+        },
+        {
+          "id": 70,
+          "name": "泡茶",
+          "aliases": [
+            "沏茶",
+            "泡一壶茶"
+          ]
+        },
+        {
+          "id": 71,
+          "name": "猫咪",
+          "aliases": [
+            "喜欢小猫",
+            "喜欢猫咪"
+          ]
+        },
+        {
+          "id": 72,
+          "name": "狗狗",
+          "aliases": [
+            "喜欢小狗",
+            "喜欢狗狗"
+          ]
+        },
+        {
+          "id": 73,
+          "name": "宠物摄影",
+          "aliases": [
+            "给宠物拍照"
+          ]
+        },
+        {
+          "id": 74,
+          "name": "云吸猫",
+          "aliases": [
+            "云养猫",
+            "网上吸猫"
+          ]
+        },
+        {
+          "id": 75,
+          "name": "遛狗",
+          "aliases": [
+            "遛小狗"
+          ]
+        },
+        {
+          "id": 76,
+          "name": "水族观赏",
+          "aliases": [
+            "看水族箱"
+          ]
+        },
+        {
+          "id": 77,
+          "name": "观鸟",
+          "aliases": [
+            "看鸟",
+            "观赏鸟类"
+          ]
+        },
+        {
+          "id": 78,
+          "name": "植物养护",
+          "aliases": [
+            "养绿植",
+            "养护植物"
+          ]
+        },
+        {
+          "id": 79,
+          "name": "户外看风景",
+          "aliases": [
+            "户外看风景"
+          ]
+        },
+        {
+          "id": 80,
+          "name": "动物园",
+          "aliases": []
+        },
+        {
+          "id": 81,
+          "name": "手游",
+          "aliases": [
+            "玩手游",
+            "手机游戏"
+          ]
+        },
+        {
+          "id": 82,
+          "name": "主机游戏",
+          "aliases": [
+            "玩主机游戏",
+            "switch游戏"
+          ]
+        },
+        {
+          "id": 83,
+          "name": "PC游戏",
+          "aliases": [
+            "电脑游戏",
+            "PC端游戏",
+            "端游"
+          ]
+        },
+        {
+          "id": 84,
+          "name": "休闲小游戏",
+          "aliases": [
+            "小游戏",
+            "休闲游戏"
+          ]
+        },
+        {
+          "id": 85,
+          "name": "棋牌",
+          "aliases": [
+            "棋牌游戏"
+          ]
+        },
+        {
+          "id": 86,
+          "name": "电竞比赛",
+          "aliases": [
+            "看电竞",
+            "电竞赛事"
+          ]
+        },
+        {
+          "id": 87,
+          "name": "数码产品",
+          "aliases": [
+            "数码设备"
+          ]
+        },
+        {
+          "id": 88,
+          "name": "AI工具",
+          "aliases": [
+            "用AI工具"
+          ]
+        },
+        {
+          "id": 89,
+          "name": "拍照修图",
+          "aliases": [
+            "剪视频",
+            "视频编辑"
+          ]
+        },
+        {
+          "id": 90,
+          "name": "视频剪辑",
+          "aliases": [
+            "看体育赛事"
+          ]
+        },
+        {
+          "id": 91,
+          "name": "朋友聚会",
+          "aliases": []
+        },
+        {
+          "id": 92,
+          "name": "饭后散步",
+          "aliases": []
+        },
+        {
+          "id": 93,
+          "name": "一起探店",
+          "aliases": []
+        },
+        {
+          "id": 94,
+          "name": "周末看展",
+          "aliases": []
+        },
+        {
+          "id": 95,
+          "name": "一起运动",
+          "aliases": []
+        },
+        {
+          "id": 96,
+          "name": "拼饭",
+          "aliases": []
+        },
+        {
+          "id": 97,
+          "name": "逛市集",
+          "aliases": [
+            "逛集市"
+          ]
+        },
+        {
+          "id": 98,
+          "name": "公益活动",
+          "aliases": [
+            "参加公益活动"
+          ]
+        },
+        {
+          "id": 99,
+          "name": "读书会",
+          "aliases": [
+            "读书分享会"
+          ]
+        },
+        {
+          "id": 100,
+          "name": "兴趣小组",
+          "aliases": [
+            "参加兴趣社群"
+          ]
+        }
+      ]
+    }
+  }
 }

@@ -10,7 +10,8 @@
     "sync": "node scripts/sync-runtime.js",
     "build": "node scripts/build-public.js",
     "start": "node server.js",
-    "test": "node scripts/sync-runtime.js --check && node test_lovemi_flow_fix.js && node tests/run_tests.js && node tests/test_need_intake.js && node tests/test_routing_edges.js && node tests/test_fact_rendering.js && node tests/test_reply_contract.js && node tests/test_profile_evidence.js && node tests/test_profile_evidence_integration.js && node tests/test_local_gateway.js && node tests/test_vercel.js && npm run test:v22",
+    "test": "node scripts/sync-runtime.js --check && node test_lovemi_flow_fix.js && node tests/run_tests.js && node tests/test_need_intake.js && node tests/test_routing_edges.js && node tests/test_fact_rendering.js && node tests/test_reply_contract.js && node tests/test_profile_evidence.js && node tests/test_profile_evidence_integration.js && node tests/test_local_gateway.js && node tests/test_vercel.js && npm run test:v22 && npm run test:profile-mapping",
+    "test:profile-mapping": "node --test tests/profile_writeback_v14.js",
     "test:v22": "node tests/v22_flow.js && node tests/v22_events.js && node tests/v22_profiles.js && node tests/v22_runtime.js && node tests/v22_frontend.js"
   }
 }

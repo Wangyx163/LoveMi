@@ -185,6 +185,7 @@ async function run(){
   await test('60% / 100% 阶段承接先于生成调用，流式与非流式均只输出一次',async()=>{
     for(const stage of ['S60','S40'])for(const streaming of [true,false]){
       const task=stage==='S60'?'REL':'Q12',st=mainState(stage,task);
+      st.facts=[{field:'NEED',sub:'traits',subject:'TA',value:'坦诚',evidence:'希望坦诚',active:true,status:'已确认',ver:1}];
       for(const id of cfg.order[stage])if(id!==task)st.tasks[id].a=1;
       st.asked={[stage]:10};
       const text='我先回应你刚刚提出的问题，再整理目前聊到的内容～',events=[],trace=[];
@@ -193,6 +194,8 @@ async function run(){
         llm:async(_id,pid)=>{
           if(pid==='P1B')return S({answer_status:'answered',turn_signal:'user_question',reply_text:text,ack:'知道啦～',facts:[]});
           if(streaming)assert.equal(events[0],text,'先回应用户再调用画像模型');
+          if(pid==='P6')return S({expect_ta:'你希望对方坦诚',love_style:''});
+          if(pid==='P7')return S({daily:''});
           return '{}';
         }
       },'为什么问这些？');

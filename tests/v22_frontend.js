@@ -47,6 +47,16 @@ const profileState=(profile={})=>({v:1,session_id:'s1',stage:'PROFILE_READY',pro
 let count=0;
 async function check(name,fn){await fn();count++;console.log('PASS '+name);}
 async function main(){
+  await check('failed generation exposes retry, not a finished or savable profile; refresh retains retry',async()=>{
+    const failed={...profileState({daily:'已生成的生活段落'}),stage:'PROFILE_FAILED',profile_version:0,profile_writeback:{reason:'composer_generation_failed'}};
+    const b=browser({runTurn:async ctx=>{ctx.trace.push({id:'N32'});return {newState:JSON.stringify(failed),reply:'画像还没有生成完成',events:[]};}});
+    await b.ui.send('生成画像');b.probe.restore();
+    assert.equal(b.get('chat-footer').hidden,true);assert.equal(b.get('conversation').querySelectorAll('.full-profile').length,0);
+    assert.deepEqual(b.get('conversation').querySelectorAll('button[data-action]').map(n=>n.dataset.action),['profile-retry','profile-supplement']);
+    const saved=JSON.parse(b.storage.get('lovemi_conversation_v1'));
+    const restored=browser({state:JSON.parse(saved.stateJson),messages:saved.messages});restored.probe.restore();
+    assert.deepEqual(restored.get('conversation').querySelectorAll('button[data-action]').map(n=>n.dataset.action),['profile-retry','profile-supplement']);
+  });
   await check('100% excludes core and empty sections; original two actions remain',()=>{
     const b=browser();b.probe.render({type:'profile',data:{core:'不得再次展示',expect_ta:'',daily:'喜欢听歌',love_style:'',tags:[]}});
     const room=b.get('conversation');assert.equal(room.querySelectorAll('.insight').length,0);

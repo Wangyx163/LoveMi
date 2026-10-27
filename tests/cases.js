@@ -15,10 +15,11 @@ const TO60=[...OPEN,
  ['一般早睡，周边的山就行',{N04:U('answered',[['Q2','sleep','自己','偏早睡','一般早睡']])}],
  ['希望有事好好说',{N04:U('answered',[['Q8','expectation','关系','有事好好沟通','希望有事好好说']]),N24:{insufficient:false,attitude:'你希望两个人有事能好好说开，周末也爱去爬山透透气。'}}]];
 const TO40=[...TO60,['继续聊',{N14:q('Q5')}]];
+const PROFILE_OK={N30:{love_style:'你遇事愿意先商量。',expect_ta:'希望有事能好好说开。'},N31:{daily:'你周末爱爬山，作息偏早。'},N32PC:{story_text:'我周末爱爬山，遇事愿意先商量。',selected_turn_id:null}};
 const S40_REST=(from)=>{const seq=[['Q5','没养，喜欢猫',[['Q5','has_pet','自己','没有养','没养'],['Q5','animal_like','自己','喜欢','喜欢猫']]],
   ['Q7','都不碰',[['Q7','smoke','自己','不吸','都不碰'],['Q7','drink','自己','不喝','都不碰']]],['Q6','看预算',[['Q6','condition','自己','先看预算','看预算']]],
   ['Q9','先商量',[['Q9','strategy','关系','先和对方商量','先商量']]],['Q10','随缘吧',[['Q10','openness','关系','随关系发展决定','随缘吧']]],['Q12','没有了',[]]];
-  const i=seq.findIndex(x=>x[0]===from);return seq.slice(i).map((x,j)=>[x[1],{N04:U(x[0]==='Q12'?'nothing_to_add':'answered',x[2]),N14:seq[i+j+1]?q(seq[i+j+1][0]):undefined,N30:{love_me:'你遇事愿意先商量。',expect_ta:'希望有事能好好说开。'},N31:{about_me:'你周末爱爬山，作息偏早。',life_me:'你不抽烟也不喝酒。'}}]);};
+  const i=seq.findIndex(x=>x[0]===from);return seq.slice(i).map((x,j)=>[x[1],{N04:U(x[0]==='Q12'?'nothing_to_add':'answered',x[2]),N14:seq[i+j+1]?q(seq[i+j+1][0]):undefined,...PROFILE_OK}]);};
 
 const CASES=[
 /* ---------- 0 开场需求轮 ---------- */
@@ -77,11 +78,11 @@ const CASES=[
 {cat:'兜底画像',off:0,name:'完全没信息 · 松弛随性型',desc:'无信息时不生成默认人格或标签',
  steps:[['开始',{}],['看感觉吧',{N04:U('nothing_to_add')}],['都没感觉',{N04:U('answered',[['CARD','l1','候选反馈','都没感觉','都没感觉']])}],
    ...['随便','不知道','嗯','随便'].map(x=>[x,{N04:U('unclear')}]),['生成画像，去首页看看',{}]],
- check:c=>[c.eq(c.st.stage,'PROFILE_READY','流程结束'),c.eq(c.st.stage_card_60.attitude,'','不造60洞察'),c.eq(c.st.stage_card_60.tags.length,0,'不造阶段标签'),c.ok(!('core' in c.st.profile),'100不显示core'),c.ok(['expect_ta','daily','love_style'].every(k=>c.st.profile[k]===''),'无依据三块留空'),c.eq(c.st.profile.tags.length,0,'不造画像标签'),c.has(c.reply(7),'「回到首页」','原按钮保留')]},
+ check:c=>[c.eq(c.st.stage,'PROFILE_FAILED','未生成不能完成'),c.eq(c.st.stage_card_60.attitude,'','不造60洞察'),c.eq(c.st.stage_card_60.tags.length,0,'不造阶段标签'),c.ok(!('core' in c.st.profile),'100不显示core'),c.ok(['expect_ta','daily','love_style'].every(k=>c.st.profile[k]===''),'无依据三块留空'),c.eq(c.st.profile.tags.length,0,'不造画像标签'),c.eq(c.st.profile_version,0,'不回写空画像')]},
 {cat:'兜底画像',off:0,name:'信号组优先级：拒答占多数',desc:'拒答比例不构成人格证据',
  steps:[['开始',{}],['不想说',{N04:U('refused',[],{refused_targets:['NEED']})}],['都没感觉',{N04:U('answered',[['CARD','l1','候选反馈','都没感觉','都没感觉']])}],
    ['不想说',{N04:U('refused')}],['不想说',{N04:U('refused')}],['不想说',{N04:U('refused')}],['生成画像，去首页看看',{}]],
- check:c=>[c.eq(c.st.stage,'PROFILE_READY','正常完成'),c.eq(c.st.profile.tags.length,0,'拒答不造边界标签'),c.ok(!c.reply(6).includes('分寸感在线'),'不展示假人格')]},
+ check:c=>[c.eq(c.st.stage,'PROFILE_FAILED','未生成不能回写'),c.eq(c.st.profile.tags.length,0,'拒答不造边界标签'),c.ok(!c.reply(6).includes('分寸感在线'),'不展示假人格')]},
 {cat:'兜底画像',off:0,name:'信号组优先级：都没感觉',desc:'人物卡没感觉不构成性格判断',
  steps:[['开始',{}],['看感觉吧',{N04:U('nothing_to_add')}],['都没感觉',{N04:U('answered',[['CARD','l1','候选反馈','都没感觉','都没感觉']])}],
    ['爬山',{N04:U('answered',[['Q1','items','自己','爬山','爬山']])}],['早睡',{N04:U('answered',[['Q2','sleep','自己','偏早睡','早睡']])}],['嗯',{N04:U('unclear')}],['生成画像，去首页看看',{}]],
@@ -89,7 +90,7 @@ const CASES=[
 {cat:'兜底画像',off:0,name:'有部分信息：只给空的板块用兜底文案',desc:'空块不填默认人格；事实标签仍展示',
  steps:[['开始',{}],['看感觉吧',{N04:U('nothing_to_add')}],['都没感觉',{N04:U('answered',[['CARD','l1','候选反馈','都没感觉','都没感觉']])}],
    ['周末爬山',{N04:U('answered',[['Q1','items','自己','爬山','周末爬山']])}],['不知道',{N04:U('unclear')}],['嗯',{N04:U('unclear')}],['还是不知道',{N04:U('unclear')}],['生成画像，去首页看看',{}]],
- check:c=>[c.ok(!('core' in c.st.profile),'不重复核心'),c.eq(c.st.profile.daily,'','无合法生成不套事实模板'),c.has(c.reply(7),'#喜欢亲近自然','保留真实标签'),c.ok(c.st.profile.tags.every(t=>t.kind==='事实'),'不补造标签'),c.eq(c.st.profile.love_style,'','无关系证据留空')]},
+ check:c=>[c.ok(!('core' in c.st.profile),'不重复核心'),c.eq(c.st.profile.daily,'','无合法生成不套事实模板'),c.ok(c.st.profile.tags.some(t=>t.text==='喜欢亲近自然'),'草稿保留真实标签'),c.ok(c.st.profile.tags.every(t=>t.kind==='事实'),'不补造标签'),c.eq(c.st.profile.love_style,'','无关系证据留空')]},
 {cat:'兜底画像',name:'缺少模型承接时使用中性文案',desc:'V2.2启用现有六条lazy_ack',
  steps:[...OPEN,['B',{N04:U('answered',[['CARD','l1','候选反馈','B','B']]),N14:q('LIFE')}],['随便',{N04:U('unclear'),N14:q('RHYTHM')}]],
  check:c=>[c.ok(c.cfg.lazy_ack.some(t=>c.reply(2).startsWith(t.replace('{about}',c.cfg.tasks.LIFE.about))),'使用已确认lazy_ack')]},
@@ -200,8 +201,8 @@ const CASES=[
    ['看情况',{N04:U('answered',[['Q6','condition','自己','看情况再决定','看情况']]),N14:{question:'那路上碰到小猫小狗，你一般会停下来逗逗吗？'}}]],
  check:c=>[c.eq(c.plan(6).task,'Q6','跨题烟酒保留并跳过已覆盖Q7'),c.ok(c.action(7)!=='REPLACE_LATER','Q5不延后重问'),c.eq(c.plan(7).task,'Q9','继续原任务序列')]},
 {cat:'乱答 / 无效输入',name:'后 40% 全程敷衍“嗯嗯”',desc:'流程仍能走完；替换不超过额度；画像只用真实信息',
- steps:[...TO40,...['Q7','Q6','Q9','Q10','Q12',null].map(k=>['嗯嗯',{N04:U('unclear'),N14:k?q(k):{question:'那换个场景，朋友聚会时你会喝点酒吗？'},N30:{love_me:'',expect_ta:'希望有事能好好说开。'},N31:{about_me:'你周末爱爬山，作息偏早。',life_me:''}}]),
-   ['嗯嗯',{N04:U('unclear'),N14:q('Q12')}],['嗯嗯',{N04:U('unclear'),N30:{love_me:'',expect_ta:'希望有事能好好说开。'},N31:{about_me:'你周末爱爬山，作息偏早。',life_me:''}}]],
+ steps:[...TO40,...['Q7','Q6','Q9','Q10','Q12',null].map(k=>['嗯嗯',{N04:U('unclear'),N14:k?q(k):{question:'那换个场景，朋友聚会时你会喝点酒吗？'},...PROFILE_OK}]),
+   ['嗯嗯',{N04:U('unclear'),N14:q('Q12'),...PROFILE_OK}],['嗯嗯',{N04:U('unclear'),...PROFILE_OK}]],
  check:c=>[c.ok(['PROFILE_READY'].includes(c.st.stage),'最终生成了画像'),c.ok(c.st.used.S40.F+c.st.used.S40.R+c.st.used.S40.S<=2,'后 40% 额外提问 ≤2'),c.eq(c.st.facts.filter(f=>f.active&&['Q5','Q6','Q7','Q9','Q10'].includes(f.field)).length,0,'后 40% 没有虚构事实')]},
 
 /* ---------- B 拒答与抗拒 ---------- */
@@ -346,14 +347,14 @@ const CASES=[
  steps:[...OPEN,['B',{N04:U('answered',[['CARD','l1','候选反馈','B','B']]),N14:q('LIFE')}],['爬山',{N04:U('answered',[['Q1','items','自己','爬山','爬山']],{followup:{worth:true,question:'一般去哪儿爬呀？'}})}],['周边的山',{N04:U('answered'),N14:q('RHYTHM')}]],
  check:c=>[c.eq(c.prog(1),40,'需求加人物主任务'),c.eq(c.prog(2),50,'生活主任务一次结算'),c.eq(c.prog(3),50,'追问不额外涨分'),c.eq(c.st.used.S60.F,1,'追问仍占额度')]},
 {cat:'追问算法',name:'最后一题理解补充后生成画像',desc:'Q12原话用于画像，不自动成为匹配事实',
- steps:[...TO40,...S40_REST('Q5').slice(0,5),['希望对方爱干净',{N04:U('answered')}]],
+ steps:[...TO40,...S40_REST('Q5').slice(0,5),['希望对方爱干净',{N04:U('answered'),...PROFILE_OK}]],
  check:c=>[c.ok(c.ran(11,'N04'),'Q12经理解'),c.eq(c.st.dialog.at(-1).a,'希望对方爱干净','保留未分类原话'),c.ok(!c.st.facts.some(f=>f.field==='Q12'),'未提取不强写事实'),c.eq(c.st.stage,'PROFILE_READY','结束'),c.eq(c.prog(11),100,'正常完成100')]},
 {cat:'模型输出异常',name:'② 60% 文案里出现人格诊断',desc:'不合规时不另造人物观察',
  steps:[...TO60.slice(0,5),['我慢热，有事好好说',{N04:U('answered',[['Q4','pace','自己','偏慢热','我慢热'],['Q8','expectation','关系','有事好好沟通','有事好好说']]),N24:{insufficient:false,attitude:'你是回避型依恋人格。'}}]],
  check:c=>[c.eq(c.st.stage_card_60.attitude,'','非法文案留空'),c.ok(!c.reply(4).includes('依恋'),'诊断词不展示')]},
 {cat:'模型输出异常',name:'③ 画像段落超长',desc:'错误字段隔离，不损失合法板块',
- steps:[...TO40,...S40_REST('Q5').slice(0,5),['没有了',{N04:U('nothing_to_add'),N30:{love_me:'你遇事愿意先商量。',expect_ta:'希望有事能好好说开。'},N31:{about_me:'你'+'很热爱生活，'.repeat(20),life_me:'你不抽烟也不喝酒。'}}]],
- check:c=>[c.ok(!c.reply(11).includes('很热爱生活'),'超长字段不显示'),c.eq(c.st.profile.daily,'','不套模板'),c.eq(c.st.profile.section_state.daily,'generation_error','错误可见于状态'),c.has(c.reply(11),'我对 TA 的期待','合法兄弟板块保留')]},
+ steps:[...TO40,...S40_REST('Q5').slice(0,5),['没有了',{N04:U('nothing_to_add'),N30:PROFILE_OK.N30,N31:{daily:'你'+'很热爱生活，'.repeat(20)}}]],
+ check:c=>[c.ok(!c.reply(11).includes('很热爱生活'),'超长字段不显示'),c.eq(c.st.profile.daily,'','不套模板'),c.eq(c.st.profile.section_state.daily,'generation_error','错误可见于状态'),c.eq(c.st.profile.expect_ta,PROFILE_OK.N30.expect_ta,'合法兄弟板块保留在草稿'),c.eq(c.st.stage,'PROFILE_FAILED','等待失败模块重试')]},
 
 /* ---------- F 额度与进度 ---------- */
 {cat:'额度与进度',name:'前 60% 额度用尽',desc:'两次人物追问 + 一次兴趣追问用完 3 次；之后说不清也不再替换',

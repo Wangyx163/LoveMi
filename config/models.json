@@ -46,6 +46,13 @@
       "max_tokens": 4096,
       "timeout_ms": 4000,
       "enable_thinking": false
+    },
+    "PC": {
+      "model": "qwen3.8-27b",
+      "temperature": 0.2,
+      "max_tokens": 600,
+      "timeout_ms": 15000,
+      "enable_thinking": false
     }
   }
 }

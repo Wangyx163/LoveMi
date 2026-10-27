@@ -118,8 +118,14 @@ function prepareProfileReady(input, options = {}) {
   // Repeated N32/refresh at the same facts revision is the same profile delivery,
   // even if a retried stochastic model happens to generate different prose.
   if (meta.last_profile_facts_revision === state.facts_revision && revision(state.profile_version)) return {state, event: null};
+  const wb=state.profile_writeback;
+  if(wb?.required && (wb.status!=='complete'||wb.facts_revision!==state.facts_revision))throw Error('business_writeback_not_ready');
   state.profile_version = revision(state.profile_version) + 1;
   const statuses = Object.fromEntries(SECTION_KEYS.map(key => [key, sectionState(state.profile, key)]));
+  if(wb?.required && (Object.values(statuses).includes('generation_error') ||
+    !SECTION_KEYS.some(key=>statuses[key]==='generated'&&text(state.profile[key]).trim()) ||
+    (['daily','love_style'].some(key=>statuses[key]==='generated'&&text(state.profile[key]).trim()) && !text(state.profile_content?.story_text).trim())))
+    throw Error('business_profile_generation_incomplete');
   const profile = Object.fromEntries(SECTION_KEYS.map(key => [key,
     statuses[key] === 'generated' ? text(state.profile[key]) : ''
   ]));
@@ -133,6 +139,17 @@ function prepareProfileReady(input, options = {}) {
     current_facts: currentSnapshot(state, options),
     current_tag_ids: currentTagIds(state), current_need_tag_ids: uniq(state.need_tags || []).sort(), status: 'ready',
   };
+  if(wb?.required){
+    event.profile_field_updates=clone(state.profile_field_updates || {});
+    event.profile_content=clone(state.profile_content || {});
+    event.write_modes={profile_field_updates:'patch',profile_content:'write_present_only'};
+    if(Array.isArray(state.interest_ids_for_merge)){
+      event.interest_ids=clone(state.interest_ids_for_merge);
+      event.write_modes.interest_ids='merge';
+    }
+    event.writeback_version='1.4';
+    event.writeback_diagnostics=clone(wb.diagnostics || []);
+  }
   state.business_events = {...meta, last_profile_facts_revision: state.facts_revision, last_profile_event_key: idempotencyKey};
   return {state, event};
 }
